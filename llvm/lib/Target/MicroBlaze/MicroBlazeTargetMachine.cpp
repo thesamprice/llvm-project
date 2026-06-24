@@ -19,8 +19,7 @@ using namespace llvm;
 
 extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void
 LLVMInitializeMicroBlazeTarget() {
-  RegisterTargetMachine<MicroBlazeTargetMachine> BE(getTheMicroBlazeTarget());
-  RegisterTargetMachine<MicroBlazeTargetMachine> LE(getTheMicroBlazeELTarget());
+  RegisterTargetMachine<MicroBlazeTargetMachine> X(getTheMicroBlazeELTarget());
 }
 
 static Reloc::Model getEffectiveRelocModel(std::optional<Reloc::Model> RM) {
