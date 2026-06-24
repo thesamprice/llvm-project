@@ -4,11 +4,13 @@ set(LLVM_TARGET_DEFINITIONS MicroBlaze.td)
 
 tablegen(LLVM MicroBlazeGenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM MicroBlazeGenSubtargetInfo.inc -gen-subtarget)
+tablegen(LLVM MicroBlazeGenCallingConv.inc -gen-callingconv)
 
 add_public_tablegen_target(MicroBlazeCommonTableGen)
 
 add_llvm_target(MicroBlazeCodeGen
   MicroBlazeFrameLowering.cpp
+  MicroBlazeISelLowering.cpp
   MicroBlazeRegisterInfo.cpp
   MicroBlazeSubtarget.cpp
   MicroBlazeTargetMachine.cpp
