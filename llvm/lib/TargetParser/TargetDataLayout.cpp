@@ -500,11 +500,15 @@ static std::string computeSPIRVDataLayout(const Triple &TT) {
 static std::string computeMicroBlazeDataLayout() {
   // ILP32 little-endian; bytes naturally widened to 32 bits in registers.
   // Keep in sync with clang/lib/Basic/Targets/MicroBlaze.h.
+  // i64:32 — 64-bit integers are 4-byte aligned in struct layout (GCC ABI).
+  // f64:32 — double likewise 4-byte aligned (GCC treats double = long long).
   return "e"           // little-endian
          "-m:e"        // ELF name mangling
          "-p:32:32"    // 32-bit pointers, 32-bit aligned
          "-i8:8:32"    // bytes widened to 32 bits
          "-i16:16:32"  // shorts widened to 32 bits
+         "-i64:32"     // 64-bit integers: 4-byte ABI alignment (matches GCC)
+         "-f64:32"     // double: 4-byte ABI alignment (matches GCC)
          "-n32";       // 32-bit native integer width
 }
 

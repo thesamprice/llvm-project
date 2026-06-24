@@ -24,6 +24,7 @@
 #include "Targets/Hexagon.h"
 #include "Targets/Lanai.h"
 #include "Targets/LoongArch.h"
+#include "Targets/MicroBlaze.h"
 #include "Targets/M68k.h"
 #include "Targets/MSP430.h"
 #include "Targets/Mips.h"
@@ -134,6 +135,9 @@ std::unique_ptr<TargetInfo> AllocateTarget(const llvm::Triple &Triple,
 
   case llvm::Triple::lanai:
     return std::make_unique<LanaiTargetInfo>(Triple, Opts);
+
+  case llvm::Triple::microblazeel:
+    return std::make_unique<MicroBlazeTargetInfo>(Triple, Opts);
 
   case llvm::Triple::aarch64_32:
     if (Triple.isOSDarwin())

@@ -59,6 +59,10 @@ public:
                                     getOptLevel()));
     return false;
   }
+
+  void addPreEmitPass() override {
+    addPass(createMicroBlazeDelaySlotFiller());
+  }
 };
 
 } // namespace
