@@ -707,6 +707,11 @@ enum {
 #include "ELFRelocs/Lanai.def"
 };
 
+// ELF Relocation types for MicroBlaze.
+enum {
+#include "ELFRelocs/MicroBlaze.def"
+};
+
 // RISCV Specific e_flags
 enum : unsigned {
   EF_RISCV_RVC = 0x0001,
