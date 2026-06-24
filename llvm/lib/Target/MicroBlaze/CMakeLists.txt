@@ -2,11 +2,15 @@ add_llvm_component_group(MicroBlaze)
 
 set(LLVM_TARGET_DEFINITIONS MicroBlaze.td)
 
+tablegen(LLVM MicroBlazeGenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM MicroBlazeGenSubtargetInfo.inc -gen-subtarget)
 
 add_public_tablegen_target(MicroBlazeCommonTableGen)
 
 add_llvm_target(MicroBlazeCodeGen
+  MicroBlazeFrameLowering.cpp
+  MicroBlazeRegisterInfo.cpp
+  MicroBlazeSubtarget.cpp
   MicroBlazeTargetMachine.cpp
 
   LINK_COMPONENTS

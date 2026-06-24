@@ -34,7 +34,8 @@ MicroBlazeTargetMachine::MicroBlazeTargetMachine(
     : CodeGenTargetMachineImpl(
           T, TT.computeDataLayout(), TT, Cpu, FeatureString, Options,
           getEffectiveRelocModel(RM),
-          getEffectiveCodeModel(CodeModel, CodeModel::Small), OptLevel) {
+          getEffectiveCodeModel(CodeModel, CodeModel::Small), OptLevel),
+      Subtarget(TT, std::string(Cpu), std::string(FeatureString), *this) {
   initAsmInfo();
 }
 
