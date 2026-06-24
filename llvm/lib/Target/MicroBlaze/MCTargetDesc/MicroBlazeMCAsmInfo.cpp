@@ -7,16 +7,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "MicroBlazeMCAsmInfo.h"
-#include "llvm/TargetParser/Triple.h"
 
 using namespace llvm;
 
 void MicroBlazeMCAsmInfo::anchor() {}
 
-MicroBlazeMCAsmInfo::MicroBlazeMCAsmInfo(const Triple &TheTriple,
+MicroBlazeMCAsmInfo::MicroBlazeMCAsmInfo(const Triple & /*TheTriple*/,
                                          const MCTargetOptions &Options)
     : MCAsmInfoELF(Options) {
-  IsLittleEndian = TheTriple.isLittleEndian();
+  IsLittleEndian = true;
   CommentString = "#";
   WeakRefDirective = "\t.weak\t";
   ExceptionsType = ExceptionHandling::DwarfCFI;

@@ -12,11 +12,6 @@
 
 using namespace llvm;
 
-Target &llvm::getTheMicroBlazeTarget() {
-  static Target TheMicroBlazeTarget;
-  return TheMicroBlazeTarget;
-}
-
 Target &llvm::getTheMicroBlazeELTarget() {
   static Target TheMicroBlazeELTarget;
   return TheMicroBlazeELTarget;
@@ -24,10 +19,7 @@ Target &llvm::getTheMicroBlazeELTarget() {
 
 extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void
 LLVMInitializeMicroBlazeTargetInfo() {
-  RegisterTarget<Triple::microblaze, /*HasJIT=*/false> X(
-      getTheMicroBlazeTarget(), "microblaze", "MicroBlaze (big endian)",
-      "MicroBlaze");
-  RegisterTarget<Triple::microblazeel, /*HasJIT=*/false> Y(
-      getTheMicroBlazeELTarget(), "microblazeel", "MicroBlaze (little endian)",
+  RegisterTarget<Triple::microblazeel, /*HasJIT=*/false> X(
+      getTheMicroBlazeELTarget(), "microblazeel", "MicroBlaze",
       "MicroBlaze");
 }

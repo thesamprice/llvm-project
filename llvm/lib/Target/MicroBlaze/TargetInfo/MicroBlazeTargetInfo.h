@@ -13,7 +13,6 @@ namespace llvm {
 
 class Target;
 
-Target &getTheMicroBlazeTarget();
 Target &getTheMicroBlazeELTarget();
 
 } // namespace llvm

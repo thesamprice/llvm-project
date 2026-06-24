@@ -16,8 +16,5 @@ using namespace llvm;
 
 extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void
 LLVMInitializeMicroBlazeTargetMC() {
-  for (Target *T :
-       {&getTheMicroBlazeTarget(), &getTheMicroBlazeELTarget()}) {
-    RegisterMCAsmInfo<MicroBlazeMCAsmInfo> X(*T);
-  }
+  RegisterMCAsmInfo<MicroBlazeMCAsmInfo> X(getTheMicroBlazeELTarget());
 }
