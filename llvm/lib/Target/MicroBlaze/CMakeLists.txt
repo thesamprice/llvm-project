@@ -16,6 +16,7 @@ add_public_tablegen_target(MicroBlazeCommonTableGen)
 
 add_llvm_target(MicroBlazeCodeGen
   MicroBlazeAsmPrinter.cpp
+  MicroBlazeDelaySlotFiller.cpp
   MicroBlazeFrameLowering.cpp
   MicroBlazeISelDAGToDAG.cpp
   MicroBlazeISelLowering.cpp
