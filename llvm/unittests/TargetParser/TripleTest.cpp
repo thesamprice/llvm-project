@@ -686,6 +686,15 @@ TEST(TripleTest, ParsedIDs) {
   EXPECT_EQ(Triple::UnknownOS, T.getOS());
   EXPECT_EQ(Triple::UnknownEnvironment, T.getEnvironment());
 
+  T = Triple("microblazeel-unknown-linux-gnu");
+  EXPECT_EQ(Triple::microblazeel, T.getArch());
+  EXPECT_EQ(Triple::UnknownVendor, T.getVendor());
+  EXPECT_EQ(Triple::Linux, T.getOS());
+  EXPECT_EQ(Triple::GNU, T.getEnvironment());
+
+  T = Triple("microblaze32el");
+  EXPECT_EQ(Triple::microblazeel, T.getArch());
+
   T = Triple("amdgcn-mesa-mesa3d");
   EXPECT_EQ(Triple::amdgcn, T.getArch());
   EXPECT_EQ(Triple::Mesa, T.getVendor());
@@ -2075,6 +2084,11 @@ TEST(TripleTest, BitWidthChecks) {
   EXPECT_TRUE(T.isArch32Bit());
   EXPECT_FALSE(T.isArch64Bit());
 
+  T.setArch(Triple::microblazeel);
+  EXPECT_FALSE(T.isArch16Bit());
+  EXPECT_TRUE(T.isArch32Bit());
+  EXPECT_FALSE(T.isArch64Bit());
+
   T.setArch(Triple::riscv32);
   EXPECT_FALSE(T.isArch16Bit());
   EXPECT_TRUE(T.isArch32Bit());
@@ -2445,6 +2459,10 @@ TEST(TripleTest, EndianArchVariants) {
   T.setArch(Triple::lanai);
   EXPECT_EQ(Triple::lanai, T.getBigEndianArchVariant().getArch());
   EXPECT_EQ(Triple::UnknownArch, T.getLittleEndianArchVariant().getArch());
+
+  T.setArch(Triple::microblazeel);
+  EXPECT_EQ(Triple::UnknownArch, T.getBigEndianArchVariant().getArch());
+  EXPECT_EQ(Triple::microblazeel, T.getLittleEndianArchVariant().getArch());
 
   T.setArch(Triple::tcele);
   EXPECT_EQ(Triple::tce, T.getBigEndianArchVariant().getArch());
@@ -3084,6 +3102,8 @@ TEST(TripleTest, DefaultExceptionHandling) {
             Triple("xtensa-unknown-unknown").getDefaultExceptionHandling());
   EXPECT_EQ(ExceptionHandling::DwarfCFI,
             Triple("lanai-unknown-unknown").getDefaultExceptionHandling());
+  EXPECT_EQ(ExceptionHandling::DwarfCFI,
+            Triple("microblazeel-unknown-unknown").getDefaultExceptionHandling());
   EXPECT_EQ(ExceptionHandling::DwarfCFI,
             Triple("arc-unknown-unknown").getDefaultExceptionHandling());
   EXPECT_EQ(
