@@ -497,6 +497,17 @@ static std::string computeSPIRVDataLayout(const Triple &TT) {
          "v512:512-v1024:1024-n8:16:32:64-G1";
 }
 
+static std::string computeMicroBlazeDataLayout(const Triple &T) {
+  // ILP32; bytes naturally widened to 32 bits in registers.
+  // Keep in sync with clang/lib/Basic/Targets/MicroBlaze.h.
+  std::string Ret = T.isLittleEndian() ? "e" : "E";
+  return Ret + "-m:e"       // ELF name mangling
+               "-p:32:32"   // 32-bit pointers, 32-bit aligned
+               "-i8:8:32"   // bytes widened to 32 bits
+               "-i16:16:32" // shorts widened to 32 bits
+               "-n32";      // 32-bit native integer width
+}
+
 static std::string computeLanaiDataLayout() {
   // Data layout (keep in sync with clang/lib/Basic/Targets.cpp)
   return "E"        // Big endian
@@ -642,6 +653,9 @@ std::string Triple::computeDataLayout(StringRef ABIName) const {
   case Triple::spirv32:
   case Triple::spirv64:
     return computeSPIRVDataLayout(*this);
+  case Triple::microblaze:
+  case Triple::microblazeel:
+    return computeMicroBlazeDataLayout(*this);
   case Triple::lanai:
     return computeLanaiDataLayout();
   case Triple::wasm32:
