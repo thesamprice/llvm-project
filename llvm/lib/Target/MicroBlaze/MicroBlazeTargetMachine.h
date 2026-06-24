@@ -9,12 +9,15 @@
 #ifndef LLVM_LIB_TARGET_MICROBLAZE_MICROBLAZETARGETMACHINE_H
 #define LLVM_LIB_TARGET_MICROBLAZE_MICROBLAZETARGETMACHINE_H
 
+#include "MicroBlazeSubtarget.h"
 #include "llvm/CodeGen/CodeGenTargetMachineImpl.h"
 #include <optional>
 
 namespace llvm {
 
 class MicroBlazeTargetMachine : public CodeGenTargetMachineImpl {
+  MicroBlazeSubtarget Subtarget;
+
 public:
   MicroBlazeTargetMachine(const Target &TheTarget, const Triple &TargetTriple,
                           StringRef Cpu, StringRef FeatureString,
@@ -25,9 +28,9 @@ public:
 
   ~MicroBlazeTargetMachine() override = default;
 
-  const TargetSubtargetInfo *
+  const MicroBlazeSubtarget *
   getSubtargetImpl(const Function &) const override {
-    return nullptr;
+    return &Subtarget;
   }
 
   TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
