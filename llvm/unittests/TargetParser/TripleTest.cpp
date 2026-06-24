@@ -686,20 +686,11 @@ TEST(TripleTest, ParsedIDs) {
   EXPECT_EQ(Triple::UnknownOS, T.getOS());
   EXPECT_EQ(Triple::UnknownEnvironment, T.getEnvironment());
 
-  T = Triple("microblaze-unknown-linux-gnu");
-  EXPECT_EQ(Triple::microblaze, T.getArch());
-  EXPECT_EQ(Triple::UnknownVendor, T.getVendor());
-  EXPECT_EQ(Triple::Linux, T.getOS());
-  EXPECT_EQ(Triple::GNU, T.getEnvironment());
-
   T = Triple("microblazeel-unknown-linux-gnu");
   EXPECT_EQ(Triple::microblazeel, T.getArch());
   EXPECT_EQ(Triple::UnknownVendor, T.getVendor());
   EXPECT_EQ(Triple::Linux, T.getOS());
   EXPECT_EQ(Triple::GNU, T.getEnvironment());
-
-  T = Triple("microblaze32");
-  EXPECT_EQ(Triple::microblaze, T.getArch());
 
   T = Triple("microblaze32el");
   EXPECT_EQ(Triple::microblazeel, T.getArch());
@@ -2093,11 +2084,6 @@ TEST(TripleTest, BitWidthChecks) {
   EXPECT_TRUE(T.isArch32Bit());
   EXPECT_FALSE(T.isArch64Bit());
 
-  T.setArch(Triple::microblaze);
-  EXPECT_FALSE(T.isArch16Bit());
-  EXPECT_TRUE(T.isArch32Bit());
-  EXPECT_FALSE(T.isArch64Bit());
-
   T.setArch(Triple::microblazeel);
   EXPECT_FALSE(T.isArch16Bit());
   EXPECT_TRUE(T.isArch32Bit());
@@ -2474,12 +2460,8 @@ TEST(TripleTest, EndianArchVariants) {
   EXPECT_EQ(Triple::lanai, T.getBigEndianArchVariant().getArch());
   EXPECT_EQ(Triple::UnknownArch, T.getLittleEndianArchVariant().getArch());
 
-  T.setArch(Triple::microblaze);
-  EXPECT_EQ(Triple::microblaze, T.getBigEndianArchVariant().getArch());
-  EXPECT_EQ(Triple::microblazeel, T.getLittleEndianArchVariant().getArch());
-
   T.setArch(Triple::microblazeel);
-  EXPECT_EQ(Triple::microblaze, T.getBigEndianArchVariant().getArch());
+  EXPECT_EQ(Triple::UnknownArch, T.getBigEndianArchVariant().getArch());
   EXPECT_EQ(Triple::microblazeel, T.getLittleEndianArchVariant().getArch());
 
   T.setArch(Triple::tcele);
@@ -3120,8 +3102,6 @@ TEST(TripleTest, DefaultExceptionHandling) {
             Triple("xtensa-unknown-unknown").getDefaultExceptionHandling());
   EXPECT_EQ(ExceptionHandling::DwarfCFI,
             Triple("lanai-unknown-unknown").getDefaultExceptionHandling());
-  EXPECT_EQ(ExceptionHandling::DwarfCFI,
-            Triple("microblaze-unknown-unknown").getDefaultExceptionHandling());
   EXPECT_EQ(ExceptionHandling::DwarfCFI,
             Triple("microblazeel-unknown-unknown").getDefaultExceptionHandling());
   EXPECT_EQ(ExceptionHandling::DwarfCFI,

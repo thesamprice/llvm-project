@@ -78,8 +78,6 @@ StringRef Triple::getArchTypeName(ArchType Kind) {
     return "mips";
   case mipsel:
     return "mipsel";
-  case microblaze:
-    return "microblaze";
   case microblazeel:
     return "microblazeel";
   case msp430:
@@ -329,7 +327,6 @@ StringRef Triple::getArchTypePrefix(ArchType Kind) {
     return "kalimba";
   case lanai:
     return "lanai";
-  case microblaze:
   case microblazeel:
     return "microblaze";
   case shave:
@@ -681,8 +678,6 @@ Triple::ArchType Triple::getArchTypeForLLVMName(StringRef Name) {
       .Case("mipsel", mipsel)
       .Case("mips64", mips64)
       .Case("mips64el", mips64el)
-      .Case("microblaze", microblaze)
-      .Case("microblaze32", microblaze)
       .Case("microblazeel", microblazeel)
       .Case("microblaze32el", microblazeel)
       .Case("msp430", msp430)
@@ -833,7 +828,6 @@ Triple::ArchType Triple::parseArch(StringRef ArchName) {
           .Case("thumbeb", Triple::thumbeb)
           .Case("avr", Triple::avr)
           .Case("m68k", Triple::m68k)
-          .Cases({"microblaze", "microblaze32"}, Triple::microblaze)
           .Cases({"microblazeel", "microblaze32el"}, Triple::microblazeel)
           .Case("msp430", Triple::msp430)
           .Cases({"mips", "mipseb", "mipsallegrex", "mipsisa32r6", "mipsr6"},
@@ -1224,7 +1218,6 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
   case Triple::hsail:
   case Triple::kalimba:
   case Triple::lanai:
-  case Triple::microblaze:
   case Triple::microblazeel:
   case Triple::loongarch32:
   case Triple::loongarch64:
@@ -1999,7 +1992,6 @@ unsigned Triple::getArchPointerBitWidth(llvm::Triple::ArchType Arch) {
   case llvm::Triple::hsail:
   case llvm::Triple::kalimba:
   case llvm::Triple::lanai:
-  case llvm::Triple::microblaze:
   case llvm::Triple::microblazeel:
   case llvm::Triple::loongarch32:
   case llvm::Triple::m68k:
@@ -2112,7 +2104,6 @@ Triple Triple::get32BitArchVariant() const {
   case Triple::hsail:
   case Triple::kalimba:
   case Triple::lanai:
-  case Triple::microblaze:
   case Triple::microblazeel:
   case Triple::loongarch32:
   case Triple::m68k:
@@ -2214,7 +2205,6 @@ Triple Triple::get64BitArchVariant() const {
   case Triple::hexagon:
   case Triple::kalimba:
   case Triple::lanai:
-  case Triple::microblaze:
   case Triple::microblazeel:
   case Triple::m68k:
   case Triple::msp430:
@@ -2396,9 +2386,6 @@ Triple Triple::getBigEndianArchVariant() const {
   case Triple::riscv64:
     T.setArch(Triple::riscv64be);
     break;
-  case Triple::microblazeel:
-    T.setArch(Triple::microblaze);
-    break;
   case Triple::sparcel:
     T.setArch(Triple::sparc);
     break;
@@ -2428,10 +2415,6 @@ Triple Triple::getLittleEndianArchVariant() const {
   case Triple::armeb:
   case Triple::thumbeb:
     T.setArch(UnknownArch);
-    break;
-
-  case Triple::microblaze:
-    T.setArch(Triple::microblazeel);
     break;
 
   case Triple::aarch64_be:
@@ -2751,7 +2734,6 @@ ExceptionHandling Triple::getDefaultExceptionHandling() const {
   case Triple::csky:
   case Triple::hexagon:
   case Triple::lanai:
-  case Triple::microblaze:
   case Triple::microblazeel:
   case Triple::m68k:
   case Triple::msp430:
