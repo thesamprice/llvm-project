@@ -15,4 +15,12 @@ class Target;
 
 } // namespace llvm
 
+// Symbolic names for MicroBlaze registers (R0–R31 + ABI aliases).
+#define GET_REGINFO_ENUM
+#include "MicroBlazeGenRegisterInfo.inc"
+
+// MicroBlaze subtarget feature bit indices.
+#define GET_SUBTARGETINFO_ENUM
+#include "MicroBlazeGenSubtargetInfo.inc"
+
 #endif // LLVM_LIB_TARGET_MICROBLAZE_MCTARGETDESC_MICROBLAZEMCTARGETDESC_H
