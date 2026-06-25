@@ -23,6 +23,10 @@ enum NodeType : unsigned {
   //   (chain, cond_as_ISD_CondCode_const, diff_reg, dest_bb)
   // diff_reg = LHS - RHS already computed; branch based on sign/zero of diff.
   BR_CC,
+  // Conditional select expanded via EmitInstrWithCustomInserter:
+  //   (TrueV, FalseV, CC_as_ISD_CondCode_const, diff_reg)
+  // Produces TrueV if (diff_reg CC 0), else FalseV.
+  SELECT_CC,
 };
 } // namespace MicroBlazeISD
 
@@ -37,6 +41,13 @@ public:
                                     const MicroBlazeSubtarget &STI);
 
   const char *getTargetNodeName(unsigned Opcode) const override;
+
+  // Division is always handled by libcalls (__divsi3, __modsi3, etc.).
+  // Returning true prevents DAGCombiner from strength-reducing constant
+  // divisions to multiply-high or multiply-lo sequences.
+  bool isIntDivCheap(EVT VT, AttributeList Attr) const override {
+    return true;
+  }
 
 private:
   SDValue LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
@@ -56,7 +67,12 @@ private:
   SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerExternalSymbol(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerShift(SDValue Op, SelectionDAG &DAG) const;
+
+  MachineBasicBlock *
+  EmitInstrWithCustomInserter(MachineInstr &MI,
+                               MachineBasicBlock *BB) const override;
 
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
 };

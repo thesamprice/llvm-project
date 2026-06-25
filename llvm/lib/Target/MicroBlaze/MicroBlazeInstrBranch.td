@@ -119,3 +119,16 @@ def : Pat<(MBCall (i32 texternalsym:$callee)),
 // Global address materialisation via Wrapper → ADDIK rD, r0, symbol.
 def : Pat<(MBWrapper tglobaladdr:$in),  (ADDIK R0, tglobaladdr:$in)>;
 def : Pat<(MBWrapper texternalsym:$in), (ADDIK R0, texternalsym:$in)>;
+
+//===----------------------------------------------------------------------===//
+// Conditional select pseudo (SELECT_CC_PSEUDO)
+//===----------------------------------------------------------------------===//
+// Expanded to a diamond CFG in EmitInstrWithCustomInserter.
+// Operands: dst, TrueV, FalseV, CC (ISD::CondCode imm), Diff (LHS-RHS reg).
+
+let usesCustomInserter = 1 in
+def SELECT_CC_PSEUDO : MBPseudo<
+    (outs GPR:$dst),
+    (ins GPR:$T, GPR:$F, i32imm:$CC, GPR:$Diff),
+    "#SELECT_CC $dst, $T, $F, $CC, $Diff",
+    [(set i32:$dst, (MBSelectCC i32:$T, i32:$F, imm:$CC, i32:$Diff))]>;

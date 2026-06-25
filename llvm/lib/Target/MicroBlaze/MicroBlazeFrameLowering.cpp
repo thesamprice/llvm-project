@@ -44,7 +44,7 @@ using namespace llvm;
 
 MicroBlazeFrameLowering::MicroBlazeFrameLowering(
     const MicroBlazeSubtarget &STI)
-    : TargetFrameLowering(TargetFrameLowering::StackGrowsDown, Align(4), 0),
+    : TargetFrameLowering(TargetFrameLowering::StackGrowsDown, Align(8), 0),
       STI(STI) {}
 
 bool MicroBlazeFrameLowering::hasFPImpl(const MachineFunction &MF) const {

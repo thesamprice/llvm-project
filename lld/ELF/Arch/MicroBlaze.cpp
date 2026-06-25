@@ -21,6 +21,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "InputFiles.h"
+#include "RelocScan.h"
 #include "Symbols.h"
 #include "Target.h"
 #include "llvm/BinaryFormat/ELF.h"
@@ -42,6 +44,9 @@ public:
                      const uint8_t *loc) const override;
   void relocate(uint8_t *loc, const Relocation &rel,
                 uint64_t val) const override;
+  void scanSection(InputSectionBase &sec) override;
+  template <class ELFT, class RelTy>
+  void scanSectionImpl(InputSectionBase &sec, Relocs<RelTy> rels);
 };
 
 } // namespace
@@ -106,6 +111,29 @@ void MicroBlaze::relocate(uint8_t *loc, const Relocation &rel,
     Err(ctx) << getErrorLoc(ctx, loc) << "unrecognized relocation "
              << rel.type;
   }
+}
+
+// Skip R_MICROBLAZE_NONE (type 0) before passing relocations to the generic
+// scanner. The generic path checks type == iRelSymbolicRel (default: 0), so
+// NONE relocations would be misclassified as ifunc-symbolic relocations.
+template <class ELFT, class RelTy>
+void MicroBlaze::scanSectionImpl(InputSectionBase &sec, Relocs<RelTy> rels) {
+  RelocScan rs(ctx, &sec);
+  sec.relocations.reserve(rels.size());
+  for (auto it = rels.begin(); it != rels.end(); ++it) {
+    RelType type = it->getType(false);
+    if (type == R_MICROBLAZE_NONE || type == R_MICROBLAZE_64_NONE ||
+        type == R_MICROBLAZE_32_NONE)
+      continue;
+    rs.scan<ELFT, RelTy>(it, type, rs.getAddend<ELFT>(*it, type));
+  }
+}
+
+void MicroBlaze::scanSection(InputSectionBase &sec) {
+  // MicroBlaze is always ELF32 little-endian (microblazeel) or big-endian.
+  // Route through the concrete type so scanSectionImpl above is called instead
+  // of TargetInfo::scanSectionImpl (template functions are not virtual).
+  elf::scanSection1<MicroBlaze, ELF32LE>(*this, sec);
 }
 
 void elf::setMicroBlazeTargetInfo(Ctx &ctx) {

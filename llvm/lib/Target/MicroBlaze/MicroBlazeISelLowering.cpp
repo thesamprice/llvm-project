@@ -8,6 +8,7 @@
 
 #include "MicroBlazeISelLowering.h"
 #include "MCTargetDesc/MicroBlazeMCTargetDesc.h"
+#include "MicroBlazeInstrInfo.h"
 #include "MicroBlazeMachineFunctionInfo.h"
 #include "MicroBlazeSubtarget.h"
 #include "MicroBlazeTargetMachine.h"
@@ -48,15 +49,21 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   setOperationAction(ISD::SDIVREM, MVT::i32, Expand);
   setOperationAction(ISD::UDIVREM, MVT::i32, Expand);
 
+  // MicroBlaze is not in LLVM's LegacyDefaultSystemLibrary predicate, so the
+  // RuntimeLibcallsInfo table leaves all software-ABI routines as Unsupported.
+  // Register them explicitly so that Expand actions emit actual calls.
+  setLibcallImpl(RTLIB::SDIV_I32, RTLIB::impl___divsi3);
+  setLibcallImpl(RTLIB::UDIV_I32, RTLIB::impl___udivsi3);
+  setLibcallImpl(RTLIB::SREM_I32, RTLIB::impl___modsi3);
+  setLibcallImpl(RTLIB::UREM_I32, RTLIB::impl___umodsi3);
+  setLibcallImpl(RTLIB::MUL_I32,  RTLIB::impl___mulsi3);
+
   // Shifts: legal with barrel-shift (TableGen patterns handle both register and
   // immediate forms). Without barrel-shift, lower to compiler-rt libcalls
   // (__lshlsi3 / __lshrsi3 / __ashrsi3) via Custom lowering; ISD::Expand is
   // intentionally avoided because its ExpandNode path mishandles scalar shifts
   // in release builds (asserts VT.isVector() which is disabled in release).
   if (!STI.hasBarrelShift()) {
-    // Register the libcall implementations explicitly; MicroBlaze is not in
-    // LLVM's LegacyDefaultSystemLibrary predicate, so the RuntimeLibcallsInfo
-    // table leaves them as Unsupported unless we set them here.
     setLibcallImpl(RTLIB::SHL_I32, RTLIB::impl___ashlsi3);
     setLibcallImpl(RTLIB::SRL_I32, RTLIB::impl___lshrsi3);
     setLibcallImpl(RTLIB::SRA_I32, RTLIB::impl___ashrsi3);
@@ -68,8 +75,14 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
 
   // MUL is always available; high-word variants need +multiply-high.
   if (!STI.hasMultiplyHigh()) {
-    setOperationAction(ISD::MULHS, MVT::i32, Expand);
-    setOperationAction(ISD::MULHU, MVT::i32, Expand);
+    setOperationAction(ISD::MULHS,     MVT::i32, Expand);
+    setOperationAction(ISD::MULHU,     MVT::i32, Expand);
+    // SMUL_LOHI/UMUL_LOHI default to Legal, which causes DAGCombiner to
+    // strength-reduce constant divisions into multiply-high sequences that
+    // MicroBlaze cannot select.  Mark them Expand so __divsi3/__modsi3
+    // libcalls are used for all divisions.
+    setOperationAction(ISD::SMUL_LOHI, MVT::i32, Expand);
+    setOperationAction(ISD::UMUL_LOHI, MVT::i32, Expand);
   }
 
   // No sign-extending loads (only zero-extend for bytes/halves).
@@ -91,14 +104,21 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   // Conditional branches: custom-lower BR_CC; BRCOND expands to BR_CC first.
   setOperationAction(ISD::BR_CC,     MVT::i32, Custom);
   setOperationAction(ISD::BRCOND,    MVT::Other, Expand);
+  // SELECT expands to SELECT_CC. SELECT_CC is custom-lowered to
+  // MicroBlazeISD::SELECT_CC which is expanded to a diamond CFG by
+  // EmitInstrWithCustomInserter. Making SELECT_CC=Custom breaks the
+  // SELECT→SELECT_CC→SETCC→SELECT_CC expansion cycle.
   setOperationAction(ISD::SELECT,    MVT::i32, Expand);
-  setOperationAction(ISD::SELECT_CC, MVT::i32, Expand);
+  setOperationAction(ISD::SELECT_CC, MVT::i32, Custom);
   setOperationAction(ISD::SETCC,     MVT::i32, Expand);
 
   // MicroBlaze does not have CTLZ, CTTZ, or CTPOP instructions.
   setOperationAction(ISD::CTLZ,  MVT::i32, Expand);
   setOperationAction(ISD::CTTZ,  MVT::i32, Expand);
   setOperationAction(ISD::CTPOP, MVT::i32, Expand);
+
+  // No jump-table support: fall back to decision trees for all switch stmts.
+  setMinimumJumpTableEntries(INT_MAX);
 
   setMinFunctionAlignment(Align(4));
 }
@@ -110,6 +130,7 @@ const char *MicroBlazeTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case MicroBlazeISD::CALL:         return "MicroBlazeISD::CALL";
   case MicroBlazeISD::Wrapper:      return "MicroBlazeISD::Wrapper";
   case MicroBlazeISD::BR_CC:        return "MicroBlazeISD::BR_CC";
+  case MicroBlazeISD::SELECT_CC:    return "MicroBlazeISD::SELECT_CC";
   }
   return nullptr;
 }
@@ -124,12 +145,104 @@ SDValue MicroBlazeTargetLowering::LowerOperation(SDValue Op,
   case ISD::GlobalAddress:  return LowerGlobalAddress(Op, DAG);
   case ISD::ExternalSymbol: return LowerExternalSymbol(Op, DAG);
   case ISD::BR_CC:          return LowerBR_CC(Op, DAG);
+  case ISD::SELECT_CC:      return LowerSELECT_CC(Op, DAG);
   case ISD::SHL:
   case ISD::SRL:
   case ISD::SRA:            return LowerShift(Op, DAG);
   default:
     llvm_unreachable("Unexpected custom lowering");
   }
+}
+
+SDValue MicroBlazeTargetLowering::LowerSELECT_CC(SDValue Op,
+                                                   SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  SDValue LHS    = Op.getOperand(0);
+  SDValue RHS    = Op.getOperand(1);
+  SDValue TrueV  = Op.getOperand(2);
+  SDValue FalseV = Op.getOperand(3);
+  ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(4))->get();
+
+  // MicroBlaze branches test a register against zero, so compute Diff = LHS - RHS.
+  // EmitInstrWithCustomInserter selects the branch opcode from the CC integer.
+  SDValue Diff  = DAG.getNode(ISD::SUB, DL, MVT::i32, LHS, RHS);
+  SDValue CCVal = DAG.getConstant(CC, DL, MVT::i32);
+  return DAG.getNode(MicroBlazeISD::SELECT_CC, DL, Op.getValueType(),
+                     TrueV, FalseV, CCVal, Diff);
+}
+
+// Map ISD::CondCode to the MicroBlaze zero-test branch opcode.
+// MicroBlaze conditional branches compare rA to zero; Diff = LHS - RHS is rA.
+static unsigned getMBBranchOpcodeForCC(ISD::CondCode CC) {
+  switch (CC) {
+  case ISD::SETEQ:  return MicroBlaze::BEQID;
+  case ISD::SETNE:  return MicroBlaze::BNEID;
+  case ISD::SETLT:  return MicroBlaze::BLTID;
+  case ISD::SETLE:  return MicroBlaze::BLEID;
+  case ISD::SETGT:  return MicroBlaze::BGTID;
+  case ISD::SETGE:  return MicroBlaze::BGEID;
+  // Unsigned: signed branch approximation (correct when values fit in [0,2^31)).
+  case ISD::SETULT: return MicroBlaze::BLTID;
+  case ISD::SETULE: return MicroBlaze::BLEID;
+  case ISD::SETUGT: return MicroBlaze::BGTID;
+  case ISD::SETUGE: return MicroBlaze::BGEID;
+  default:
+    llvm_unreachable("Unsupported condition code for MicroBlaze SELECT_CC");
+  }
+}
+
+// Expand SELECT_CC_PSEUDO into a diamond CFG:
+//
+//   headMBB:
+//     BrOpc DiffReg, sinkMBB   // condition TRUE → branch to sinkMBB
+//     // fall-through → copy0MBB (false value path)
+//   copy0MBB: (empty staging block)
+//     // fall-through → sinkMBB
+//   sinkMBB:
+//     dst = phi [FalseV, copy0MBB], [TrueV, headMBB]
+//
+// MI operands: dst(0) TrueV(1) FalseV(2) CC_imm(3) Diff(4)
+MachineBasicBlock *MicroBlazeTargetLowering::EmitInstrWithCustomInserter(
+    MachineInstr &MI, MachineBasicBlock *BB) const {
+  assert(MI.getOpcode() == MicroBlaze::SELECT_CC_PSEUDO &&
+         "Unknown custom-inserter pseudo");
+
+  DebugLoc DL = MI.getDebugLoc();
+  MachineFunction *MF = BB->getParent();
+  const TargetInstrInfo &TII = *MF->getSubtarget().getInstrInfo();
+  const BasicBlock *LLVM_BB = BB->getBasicBlock();
+  MachineFunction::iterator It = ++BB->getIterator();
+
+  MachineBasicBlock *headMBB  = BB;
+  MachineBasicBlock *copy0MBB = MF->CreateMachineBasicBlock(LLVM_BB);
+  MachineBasicBlock *sinkMBB  = MF->CreateMachineBasicBlock(LLVM_BB);
+  MF->insert(It, copy0MBB);
+  MF->insert(It, sinkMBB);
+
+  // Transfer instructions after the pseudo and successor edges to sinkMBB.
+  sinkMBB->splice(sinkMBB->begin(), headMBB,
+                  std::next(MI.getIterator()), headMBB->end());
+  sinkMBB->transferSuccessorsAndUpdatePHIs(headMBB);
+
+  ISD::CondCode CC = static_cast<ISD::CondCode>(MI.getOperand(3).getImm());
+  Register DiffReg = MI.getOperand(4).getReg();
+  unsigned BrOpc = getMBBranchOpcodeForCC(CC);
+
+  // headMBB: branch to sinkMBB if condition is TRUE; fall-through = false path.
+  BuildMI(headMBB, DL, TII.get(BrOpc)).addReg(DiffReg).addMBB(sinkMBB);
+  headMBB->addSuccessor(copy0MBB);
+  headMBB->addSuccessor(sinkMBB);
+
+  copy0MBB->addSuccessor(sinkMBB);
+
+  // sinkMBB: phi merges TrueV (from headMBB) and FalseV (from copy0MBB).
+  BuildMI(*sinkMBB, sinkMBB->begin(), DL, TII.get(TargetOpcode::PHI),
+          MI.getOperand(0).getReg())
+      .addReg(MI.getOperand(2).getReg()).addMBB(copy0MBB)
+      .addReg(MI.getOperand(1).getReg()).addMBB(headMBB);
+
+  MI.eraseFromParent();
+  return sinkMBB;
 }
 
 SDValue MicroBlazeTargetLowering::LowerShift(SDValue Op,
@@ -168,8 +281,10 @@ SDValue MicroBlazeTargetLowering::LowerBR_CC(SDValue Op,
 SDValue MicroBlazeTargetLowering::LowerGlobalAddress(SDValue Op,
                                                       SelectionDAG &DAG) const {
   SDLoc DL(Op);
-  const GlobalValue *GV = cast<GlobalAddressSDNode>(Op)->getGlobal();
-  SDValue GAWrapper = DAG.getTargetGlobalAddress(GV, DL, MVT::i32);
+  auto *GAN = cast<GlobalAddressSDNode>(Op);
+  SDValue GAWrapper =
+      DAG.getTargetGlobalAddress(GAN->getGlobal(), DL, MVT::i32,
+                                 GAN->getOffset());
   return DAG.getNode(MicroBlazeISD::Wrapper, DL, MVT::i32, GAWrapper);
 }
 

@@ -31,3 +31,21 @@ MicroBlazeSubtarget::MicroBlazeSubtarget(const Triple &TT, StringRef CPU,
     : MicroBlazeGenSubtargetInfo(TT, CPU, /*TuneCPU=*/CPU, FS),
       InstrInfo(initSubtargetDependencies(CPU, FS, *this)),
       FrameLowering(*this), TLInfo(TM, *this) {}
+
+// Register software-ABI libcalls that MicroBlaze requires but that are not
+// auto-enabled by LLVM's LegacyDefaultSystemLibrary predicate.
+void MicroBlazeSubtarget::initLibcallLoweringInfo(
+    LibcallLoweringInfo &Info) const {
+  const struct { RTLIB::Libcall Op; RTLIB::LibcallImpl Impl; } Calls[] = {
+    {RTLIB::SDIV_I32, RTLIB::impl___divsi3},
+    {RTLIB::UDIV_I32, RTLIB::impl___udivsi3},
+    {RTLIB::SREM_I32, RTLIB::impl___modsi3},
+    {RTLIB::UREM_I32, RTLIB::impl___umodsi3},
+    {RTLIB::MUL_I32,  RTLIB::impl___mulsi3},
+    {RTLIB::SHL_I32,  RTLIB::impl___ashlsi3},
+    {RTLIB::SRL_I32,  RTLIB::impl___lshrsi3},
+    {RTLIB::SRA_I32,  RTLIB::impl___ashrsi3},
+  };
+  for (const auto &LC : Calls)
+    Info.setLibcallImpl(LC.Op, LC.Impl);
+}
