@@ -67,4 +67,5 @@ LLVMInitializeMicroBlazeTargetMC() {
   TargetRegistry::RegisterMCSubtargetInfo(T, createMicroBlazeMCSubtargetInfo);
   TargetRegistry::RegisterMCInstPrinter(T, createMicroBlazeMCInstPrinter);
   TargetRegistry::RegisterMCCodeEmitter(T, createMicroBlazeMCCodeEmitter);
+  TargetRegistry::RegisterMCAsmBackend(T, createMicroBlazeAsmBackend);
 }

@@ -1,9 +1,6 @@
-set(LLVM_TARGET_DEFINITIONS ../MicroBlaze.td)
-
-tablegen(LLVM MicroBlazeGenAsmWriter.inc -gen-asm-writer)
-add_public_tablegen_target(MicroBlazeDescTableGen)
-
 add_llvm_component_library(LLVMMicroBlazeDesc
+  MicroBlazeAsmBackend.cpp
+  MicroBlazeELFObjectWriter.cpp
   MicroBlazeInstPrinter.cpp
   MicroBlazeMCAsmInfo.cpp
   MicroBlazeMCCodeEmitter.cpp
@@ -12,6 +9,7 @@ add_llvm_component_library(LLVMMicroBlazeDesc
   LINK_COMPONENTS
   MicroBlazeInfo
   MC
+  MCDisassembler
   Support
   TargetParser
 

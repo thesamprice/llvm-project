@@ -10,6 +10,7 @@ tablegen(LLVM MicroBlazeGenAsmWriter.inc -gen-asm-writer)
 tablegen(LLVM MicroBlazeGenAsmMatcher.inc -gen-asm-matcher)
 tablegen(LLVM MicroBlazeGenMCCodeEmitter.inc -gen-emitter)
 tablegen(LLVM MicroBlazeGenDAGISel.inc -gen-dag-isel)
+tablegen(LLVM MicroBlazeGenDisassemblerTables.inc -gen-disassembler)
 
 add_public_tablegen_target(MicroBlazeCommonTableGen)
 
@@ -42,5 +43,6 @@ add_llvm_target(MicroBlazeCodeGen
   )
 
 add_subdirectory(AsmParser)
+add_subdirectory(Disassembler)
 add_subdirectory(MCTargetDesc)
 add_subdirectory(TargetInfo)
