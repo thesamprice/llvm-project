@@ -9,13 +9,17 @@
 #ifndef LLVM_LIB_TARGET_MICROBLAZE_MICROBLAZETARGETMACHINE_H
 #define LLVM_LIB_TARGET_MICROBLAZE_MICROBLAZETARGETMACHINE_H
 
+#include "MicroBlazeMachineFunctionInfo.h"
 #include "MicroBlazeSubtarget.h"
 #include "llvm/CodeGen/CodeGenTargetMachineImpl.h"
+#include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
+#include <memory>
 #include <optional>
 
 namespace llvm {
 
 class MicroBlazeTargetMachine : public CodeGenTargetMachineImpl {
+  std::unique_ptr<TargetLoweringObjectFile> TLOF;
   MicroBlazeSubtarget Subtarget;
 
 public:
@@ -33,7 +37,18 @@ public:
     return &Subtarget;
   }
 
+  TargetLoweringObjectFile *getObjFileLowering() const override {
+    return TLOF.get();
+  }
+
   TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
+
+  MachineFunctionInfo *
+  createMachineFunctionInfo(BumpPtrAllocator &Allocator, const Function &F,
+                            const TargetSubtargetInfo *STI) const override {
+    return MicroBlazeMachineFunctionInfo::create<MicroBlazeMachineFunctionInfo>(
+        Allocator, F, STI);
+  }
 };
 
 } // namespace llvm

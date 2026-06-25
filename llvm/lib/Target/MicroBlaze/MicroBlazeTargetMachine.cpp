@@ -8,11 +8,14 @@
 
 #include "MicroBlazeTargetMachine.h"
 #include "MicroBlaze.h"
+#include "MicroBlazeISelDAGToDAG.h"
 #include "TargetInfo/MicroBlazeTargetInfo.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/Target/TargetOptions.h"
+#include <memory>
 #include <optional>
 
 using namespace llvm;
@@ -35,11 +38,32 @@ MicroBlazeTargetMachine::MicroBlazeTargetMachine(
           T, TT.computeDataLayout(), TT, Cpu, FeatureString, Options,
           getEffectiveRelocModel(RM),
           getEffectiveCodeModel(CodeModel, CodeModel::Small), OptLevel),
+      TLOF(std::make_unique<TargetLoweringObjectFileELF>()),
       Subtarget(TT, std::string(Cpu), std::string(FeatureString), *this) {
   initAsmInfo();
 }
 
+namespace {
+
+class MicroBlazePassConfig : public TargetPassConfig {
+public:
+  MicroBlazePassConfig(MicroBlazeTargetMachine &TM, PassManagerBase &PM)
+      : TargetPassConfig(TM, PM) {}
+
+  MicroBlazeTargetMachine &getMicroBlazeTargetMachine() const {
+    return getTM<MicroBlazeTargetMachine>();
+  }
+
+  bool addInstSelector() override {
+    addPass(createMicroBlazeISelDag(getMicroBlazeTargetMachine(),
+                                    getOptLevel()));
+    return false;
+  }
+};
+
+} // namespace
+
 TargetPassConfig *
 MicroBlazeTargetMachine::createPassConfig(PassManagerBase &PM) {
-  return new TargetPassConfig(*this, PM);
+  return new MicroBlazePassConfig(*this, PM);
 }

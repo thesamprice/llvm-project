@@ -53,8 +53,8 @@ def R31 : MBReg<31, "r31">,           DwarfRegNum<[31]>;
 // Register classes
 //===----------------------------------------------------------------------===//
 
-// Callee-saved registers per MicroBlaze ABI: R22–R31.
-def CSR : CalleeSavedRegs<(add R22, R23, R24, R25, R26, R27, R28, R29, R30, R31)>;
+// Callee-saved registers per MicroBlaze ABI: R19 (frame pointer), R22–R31.
+def CSR : CalleeSavedRegs<(add R19, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31)>;
 
 // GPR — all potentially allocatable integer registers.  Reserved registers
 // (R0, R1, R2, R13, R14, R15, R16, R17, R18) are excluded from this class;
