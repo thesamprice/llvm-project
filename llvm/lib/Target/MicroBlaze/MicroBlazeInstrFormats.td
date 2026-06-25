@@ -99,6 +99,52 @@ class MBPseudo<dag outs, dag ins, string asmstr, list<dag> pattern>
 }
 
 //===----------------------------------------------------------------------===//
+// BSRLI/BSRAI/BSLLI — barrel-shift immediate (opcode 0x19, UG984 §5 Fig 82)
+//   [31:26]=0x19  [25:21]=rD  [20:16]=rA  [15:11]=0  [10]=S  [9]=T
+//   [8:5]=0  [4:0]=shamt5
+// S=1: shift left; T=1: arithmetic; not a Type B — imm prefix has no effect.
+//===----------------------------------------------------------------------===//
+class MBBSI<bit S, bit T, dag outs, dag ins, string asmstr, list<dag> pattern>
+    : MBInst<outs, ins, asmstr, pattern> {
+  bits<5> rD;
+  bits<5> rA;
+  bits<5> shamt;
+
+  let Inst{31-26} = 0x19;
+  let Inst{25-21} = rD;
+  let Inst{20-16} = rA;
+  let Inst{15-11} = 0;
+  let Inst{10}    = S;
+  let Inst{9}     = T;
+  let Inst{8-5}   = 0;
+  let Inst{4-0}   = shamt;
+}
+
+//===----------------------------------------------------------------------===//
+// BSEFI/BSIFI — barrel-shift field extract/insert (opcode 0x19, UG984 §5 Fig 82)
+//   [31:26]=0x19  [25:21]=rD  [20:16]=rA  [15]=I  [14]=E  [13:11]=0
+//   [10:6]=IMMW  [5]=0  [4:0]=IMMS
+// E=1: extract field; I=1: insert field; IMMW=end bit index, IMMS=shift amount.
+//===----------------------------------------------------------------------===//
+class MBBSF<bit I, bit E, dag outs, dag ins, string asmstr, list<dag> pattern>
+    : MBInst<outs, ins, asmstr, pattern> {
+  bits<5> rD;
+  bits<5> rA;
+  bits<5> immw;
+  bits<5> imms;
+
+  let Inst{31-26} = 0x19;
+  let Inst{25-21} = rD;
+  let Inst{20-16} = rA;
+  let Inst{15}    = I;
+  let Inst{14}    = E;
+  let Inst{13-11} = 0;
+  let Inst{10-6}  = immw;
+  let Inst{5}     = 0;
+  let Inst{4-0}   = imms;
+}
+
+//===----------------------------------------------------------------------===//
 // MFS — Move From Special-Purpose Register  (opcode 0x25, UG984 §5 Fig 105)
 //   [31:26]=0x25  [25:21]=rD  [20]=0  [19]=E  [18:16]=000  [15]=1  [14]=0
 //   [13:0]=rS_addr (14-bit SPR address)
