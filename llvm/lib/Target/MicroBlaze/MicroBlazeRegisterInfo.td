@@ -28,8 +28,8 @@ foreach i = 0-31 in {
 // accepts them so that asm code can reference r0 (the zero register), r1
 // (stack pointer), etc.  Allocation order: caller-saved first, callee-saved
 // last; reserved registers at the back so the allocator avoids them naturally.
-// Callee-saved registers per MicroBlaze ABI: R22–R31.
-def CSR : CalleeSavedRegs<(add R22, R23, R24, R25, R26, R27, R28, R29, R30, R31)>;
+// Callee-saved registers per MicroBlaze ABI: R19, R22–R31.
+def CSR : CalleeSavedRegs<(add R19, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31)>;
 
 def GPR : RegisterClass<"MicroBlaze", [i32], 32, (add
     // Return values / argument registers / caller-saved scratch

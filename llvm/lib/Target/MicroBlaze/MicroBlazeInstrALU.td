@@ -123,6 +123,14 @@ def : Pat<(mul i32:$ra, simm16_pat:$imm), (MULI_  GPR:$ra, imm:$imm)>;
 // Small integer constants → ADDIK r0, imm.
 def : Pat<(i32 simm16_pat:$imm), (ADDIK R0, imm:$imm)>;
 
+// 32-bit constant materialization.
+// LI32 accepts any i32 immediate; it is expanded to ADDIK in MCInstLower.
+// The MCCodeEmitter automatically prepends an IMM prefix when the value
+// does not fit in a signed 16-bit field (UG984 §5.2).
+def LI32 : MBPseudo<(outs GPR:$rD), (ins i32imm:$imm),
+                     "#LI32 $rD, $imm",
+                     [(set i32:$rD, imm:$imm)]>;
+
 // Barrel-shift
 let Predicates = [HasBarrelShiftPred] in {
   def : Pat<(srl i32:$ra, i32:$rb), (BSRL GPR:$ra, GPR:$rb)>;

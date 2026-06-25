@@ -49,21 +49,24 @@ void MicroBlazeInstPrinter::printPCRelImmOperand(const MCInst *MI,
                                                   uint64_t Address,
                                                   unsigned OpNo,
                                                   raw_ostream &O) {
-  // PC-relative branch targets — print as plain operand for now.
-  printOperand(MI, OpNo, O);
+  const MCOperand &Op = MI->getOperand(OpNo);
+  if (Op.isImm())
+    O << Op.getImm();
+  else if (Op.isExpr())
+    MAI.printExpr(O, *Op.getExpr());
+  else
+    llvm_unreachable("Unknown operand kind in printPCRelImmOperand");
 }
 
-void MicroBlazeInstPrinter::printMemOperand(const MCInst *MI, int OpNo,
+void MicroBlazeInstPrinter::printMemOperand(const MCInst *MI, unsigned OpNo,
                                              raw_ostream &O) {
-  // Type B load/store: rA, imm — print as "rA, imm".
   printOperand(MI, OpNo, O);
   O << ", ";
   printOperand(MI, OpNo + 1, O);
 }
 
-void MicroBlazeInstPrinter::printMemOperandRR(const MCInst *MI, int OpNo,
+void MicroBlazeInstPrinter::printMemOperandRR(const MCInst *MI, unsigned OpNo,
                                                raw_ostream &O) {
-  // Type A load/store: rA, rB — print as "rA, rB".
   printOperand(MI, OpNo, O);
   O << ", ";
   printOperand(MI, OpNo + 1, O);
