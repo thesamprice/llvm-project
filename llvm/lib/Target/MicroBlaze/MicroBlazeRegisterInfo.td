@@ -48,6 +48,7 @@ def R29 : MBReg<29, "r29">,           DwarfRegNum<[29]>;
 def R30 : MBReg<30, "r30">,           DwarfRegNum<[30]>;
 def R31 : MBReg<31, "r31">,           DwarfRegNum<[31]>;
 
+
 //===----------------------------------------------------------------------===//
 // Register classes
 //===----------------------------------------------------------------------===//
@@ -66,5 +67,7 @@ def GPR : RegisterClass<"MicroBlaze", [i32], 32, (add
     // Frame pointer (eliminable to R1), PIC GOT pointers
     R19, R20, R21,
     // Callee-saved
-    R22, R23, R24, R25, R26, R27, R28, R29, R30, R31
+    R22, R23, R24, R25, R26, R27, R28, R29, R30, R31,
+    // Reserved — available for asm but not allocated by the register allocator
+    R0, R1, R2, R13, R14, R15, R16, R17, R18
 )>;

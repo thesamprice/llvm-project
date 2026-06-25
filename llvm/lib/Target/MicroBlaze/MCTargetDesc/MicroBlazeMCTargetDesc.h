@@ -11,7 +11,13 @@
 
 namespace llvm {
 
+class MCCodeEmitter;
+class MCContext;
+class MCInstrInfo;
 class Target;
+
+MCCodeEmitter *createMicroBlazeMCCodeEmitter(const MCInstrInfo &MCII,
+                                              MCContext &Ctx);
 
 } // namespace llvm
 
