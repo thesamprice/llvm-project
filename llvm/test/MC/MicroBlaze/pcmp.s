@@ -1,4 +1,4 @@
-# RUN: llvm-mc -triple=microblazeel -show-encoding < %s | FileCheck %s
+# RUN: llvm-mc -triple=microblazeel -show-encoding -mattr=+pattern-compare < %s | FileCheck %s
 # REQUIRES: microblaze-registered-target
 
 # MicroBlaze pattern-compare and CLZ instruction encoding tests (UG984 §5).
