@@ -37,6 +37,10 @@ include "MicroBlazeInstrInfo.td"
 
 def MicroBlazeInstrInfo : InstrInfo;
 
+// Map the generic ptr_rc (pointer-like register class used by standard
+// pseudoinstructions) to the MicroBlaze GPR class.
+defm : RemapAllTargetPseudoPointerOperands<GPR>;
+
 //===----------------------------------------------------------------------===//
 // MicroBlaze processors supported
 //===----------------------------------------------------------------------===//
