@@ -20,6 +20,6 @@ MicroBlazeSubtarget::MicroBlazeSubtarget(const Triple &TT, StringRef CPU,
                                          StringRef FS,
                                          const MicroBlazeTargetMachine &TM)
     : MicroBlazeGenSubtargetInfo(TT, CPU, /*TuneCPU=*/CPU, FS),
-      FrameLowering(*this) {
+      InstrInfo(*this), FrameLowering(*this) {
   ParseSubtargetFeatures(CPU, CPU, FS);
 }
