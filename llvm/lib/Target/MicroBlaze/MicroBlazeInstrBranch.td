@@ -111,10 +111,11 @@ def : Pat<(br bb:$dest), (BRI bb:$dest)>;
 // Return
 def : Pat<(MBRetFlag), (RTSD R15, 8)>;
 
-// Direct call (callee is a global address target).
+// Direct call (callee is a global address or external symbol).
 def : Pat<(MBCall (i32 tglobaladdr:$callee)), (BRALID R15, tglobaladdr:$callee)>;
 def : Pat<(MBCall (i32 texternalsym:$callee)),
           (BRALID R15, texternalsym:$callee)>;
+
 
 // Global address materialisation via Wrapper → ADDIK rD, r0, symbol.
 def : Pat<(MBWrapper tglobaladdr:$in),  (ADDIK R0, tglobaladdr:$in)>;
@@ -132,3 +133,20 @@ def SELECT_CC_PSEUDO : MBPseudo<
     (ins GPR:$T, GPR:$F, i32imm:$CC, GPR:$Diff),
     "#SELECT_CC $dst, $T, $F, $CC, $Diff",
     [(set i32:$dst, (MBSelectCC i32:$T, i32:$F, imm:$CC, i32:$Diff))]>;
+
+// SELECT_CC_CMPU_PSEUDO: CMPU-based unsigned conditional select.
+// Operands: dst, TrueV, FalseV, CC (ISD::CondCode imm), LHS, RHS.
+// EmitInstrWithCustomInserter emits CMPU LHS, RHS and branches on the result.
+// MBSelectCCCmpu: (TrueV, FalseV, CC_imm, LHS, RHS) → result
+def SDT_MBSelectCCCmpu : SDTypeProfile<1, 5, [
+    SDTCisSameAs<0, 1>, SDTCisSameAs<1, 2>,
+    SDTCisVT<3, i32>, SDTCisVT<4, i32>, SDTCisVT<5, i32>]>;
+def MBSelectCCCmpu : SDNode<"MicroBlazeISD::SELECT_CC_CMPU", SDT_MBSelectCCCmpu, []>;
+
+let usesCustomInserter = 1, Predicates = [HasPatternComparePred] in
+def SELECT_CC_CMPU_PSEUDO : MBPseudo<
+    (outs GPR:$dst),
+    (ins GPR:$T, GPR:$F, i32imm:$CC, GPR:$LHS, GPR:$RHS),
+    "#SELECT_CC_CMPU $dst, $T, $F, $CC, $LHS, $RHS",
+    [(set i32:$dst,
+      (MBSelectCCCmpu i32:$T, i32:$F, imm:$CC, i32:$LHS, i32:$RHS))]>;

@@ -27,6 +27,14 @@ enum NodeType : unsigned {
   //   (TrueV, FalseV, CC_as_ISD_CondCode_const, diff_reg)
   // Produces TrueV if (diff_reg CC 0), else FalseV.
   SELECT_CC,
+  // Unsigned conditional branch using the CMPU instruction (UG984 §5 Fig 84).
+  // CMPU sets bit31=1 iff LHS > RHS unsigned; branch opcodes are reversed
+  // compared to the RSUBK-based BR_CC path.
+  //   (chain, cond_as_ISD_CondCode_const, LHS, RHS, dest_bb)
+  BR_CC_CMPU,
+  // Unsigned conditional select using CMPU; expanded by EmitInstrWithCustomInserter.
+  //   (TrueV, FalseV, CC_as_ISD_CondCode_const, LHS, RHS)
+  SELECT_CC_CMPU,
 };
 } // namespace MicroBlazeISD
 

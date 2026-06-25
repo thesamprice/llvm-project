@@ -34,14 +34,24 @@ void MicroBlazeInstPrinter::printInst(const MCInst *MI, uint64_t Address,
 
 void MicroBlazeInstPrinter::printOperand(const MCInst *MI, unsigned OpNo,
                                          raw_ostream &O) {
+  if (OpNo >= MI->getNumOperands()) {
+    llvm::errs() << "printOperand: opcode=" << MI->getOpcode()
+                 << " nops=" << MI->getNumOperands()
+                 << " OpNo=" << OpNo << " out-of-bounds\n";
+    return;
+  }
   const MCOperand &Op = MI->getOperand(OpNo);
   if (Op.isReg()) {
     O << getRegisterName(Op.getReg());
   } else if (Op.isImm()) {
     O << Op.getImm();
-  } else {
-    assert(Op.isExpr() && "unknown operand type");
+  } else if (Op.isExpr()) {
     MAI.printExpr(O, *Op.getExpr());
+  } else {
+    llvm::errs() << "printOperand: opcode=" << MI->getOpcode()
+                 << " OpNo=" << OpNo
+                 << (Op.isValid() ? " unexpected-kind" : " kInvalid") << "\n";
+    O << "<invalid>";
   }
 }
 
@@ -49,13 +59,23 @@ void MicroBlazeInstPrinter::printPCRelImmOperand(const MCInst *MI,
                                                   uint64_t Address,
                                                   unsigned OpNo,
                                                   raw_ostream &O) {
+  if (OpNo >= MI->getNumOperands()) {
+    llvm::errs() << "printPCRelImmOperand: opcode=" << MI->getOpcode()
+                 << " nops=" << MI->getNumOperands()
+                 << " OpNo=" << OpNo << " out-of-bounds\n";
+    return;
+  }
   const MCOperand &Op = MI->getOperand(OpNo);
   if (Op.isImm())
     O << Op.getImm();
   else if (Op.isExpr())
     MAI.printExpr(O, *Op.getExpr());
-  else
-    llvm_unreachable("Unknown operand kind in printPCRelImmOperand");
+  else {
+    llvm::errs() << "printPCRelImmOperand: opcode=" << MI->getOpcode()
+                 << " OpNo=" << OpNo
+                 << (Op.isValid() ? " unexpected-kind" : " kInvalid") << "\n";
+    O << "<invalid>";
+  }
 }
 
 void MicroBlazeInstPrinter::printMemOperand(const MCInst *MI, unsigned OpNo,

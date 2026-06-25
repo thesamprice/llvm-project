@@ -145,9 +145,37 @@ void MicroBlazeDAGToDAGISel::Select(SDNode *Node) {
     SDValue Chain   = Node->getOperand(0);
 
     unsigned BrOp = getBranchOpcodeForCC(CC);
-    // The diff operand still needs to be selected.
     SDNode *Selected = CurDAG->getMachineNode(BrOp, DL, MVT::Other,
                                               {DiffVal, Dest, Chain});
+    ReplaceNode(Node, Selected);
+    return;
+  }
+
+  // Handle MicroBlazeISD::BR_CC_CMPU: (chain, cc_const, LHS, RHS, dest_bb)
+  // Emit CMPU rtemp, LHS, RHS then branch using the CMPU-reversed opcode.
+  // CMPU sets bit31=1 iff LHS > RHS unsigned (UG984 §5 Fig 84).
+  if (Node->getOpcode() == MicroBlazeISD::BR_CC_CMPU) {
+    SDLoc DL(Node);
+    ISD::CondCode CC = static_cast<ISD::CondCode>(
+        cast<ConstantSDNode>(Node->getOperand(1))->getZExtValue());
+    SDValue LHS   = Node->getOperand(2);
+    SDValue RHS   = Node->getOperand(3);
+    SDValue Dest  = Node->getOperand(4);
+    SDValue Chain = Node->getOperand(0);
+
+    SDNode *CmpuNode = CurDAG->getMachineNode(MicroBlaze::CMPU, DL, MVT::i32,
+                                              {LHS, RHS});
+    SDValue CmpuResult(CmpuNode, 0);
+    unsigned BrOp;
+    switch (CC) {
+    case ISD::SETUGT: BrOp = MicroBlaze::BLTID; break;
+    case ISD::SETULT: BrOp = MicroBlaze::BGTID; break;
+    case ISD::SETUGE: BrOp = MicroBlaze::BLEID; break;
+    case ISD::SETULE: BrOp = MicroBlaze::BGEID; break;
+    default: llvm_unreachable("Expected unsigned inequality CC in BR_CC_CMPU");
+    }
+    SDNode *Selected = CurDAG->getMachineNode(BrOp, DL, MVT::Other,
+                                              {CmpuResult, Dest, Chain});
     ReplaceNode(Node, Selected);
     return;
   }

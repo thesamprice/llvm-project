@@ -62,6 +62,8 @@ RelExpr MicroBlaze::getRelExpr(RelType type, const Symbol &s,
   case R_MICROBLAZE_NONE:
   case R_MICROBLAZE_64_NONE:
   case R_MICROBLAZE_32_NONE:
+  case R_MICROBLAZE_32_PCREL_LO: // placeholder low-half of R_MICROBLAZE_64_PCREL pair
+  case R_MICROBLAZE_32_LO:       // placeholder low-half of R_MICROBLAZE_64 pair
     return R_NONE;
   case R_MICROBLAZE_64_PCREL:
   case R_MICROBLAZE_32_PCREL:
@@ -123,7 +125,8 @@ void MicroBlaze::scanSectionImpl(InputSectionBase &sec, Relocs<RelTy> rels) {
   for (auto it = rels.begin(); it != rels.end(); ++it) {
     RelType type = it->getType(false);
     if (type == R_MICROBLAZE_NONE || type == R_MICROBLAZE_64_NONE ||
-        type == R_MICROBLAZE_32_NONE)
+        type == R_MICROBLAZE_32_NONE || type == R_MICROBLAZE_32_PCREL_LO ||
+        type == R_MICROBLAZE_32_LO)
       continue;
     rs.scan<ELFT, RelTy>(it, type, rs.getAddend<ELFT>(*it, type));
   }

@@ -70,7 +70,9 @@ MicroBlazeMCInstLower::LowerOperand(const MachineOperand &MO,
     return MCOperand(); // skip — register masks are not MC operands.
 
   default:
-    llvm_unreachable("Unknown operand type");
+    llvm::errs() << "MicroBlazeMCInstLower: unhandled MachineOperand type "
+                 << (unsigned)MO.getType() << "\n";
+    return MCOperand();
   }
 }
 

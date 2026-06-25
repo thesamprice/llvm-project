@@ -58,6 +58,23 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   setLibcallImpl(RTLIB::UREM_I32, RTLIB::impl___umodsi3);
   setLibcallImpl(RTLIB::MUL_I32,  RTLIB::impl___mulsi3);
 
+  // Memory intrinsics: getMemcpy/getMemset/getMemmove pass the impl enum to
+  // getExternalSymbol; if the impl is Unsupported, getLibcallImplName returns
+  // a null StringRef which propagates as a null symbol and crashes in LowerCall.
+  setLibcallImpl(RTLIB::MEMCPY,  RTLIB::impl_memcpy);
+  setLibcallImpl(RTLIB::MEMMOVE, RTLIB::impl_memmove);
+  setLibcallImpl(RTLIB::MEMSET,  RTLIB::impl_memset);
+
+  // 64-bit arithmetic: LLVM expands i64 ops on this 32-bit target via libcalls.
+  setLibcallImpl(RTLIB::SDIV_I64, RTLIB::impl___divdi3);
+  setLibcallImpl(RTLIB::UDIV_I64, RTLIB::impl___udivdi3);
+  setLibcallImpl(RTLIB::SREM_I64, RTLIB::impl___moddi3);
+  setLibcallImpl(RTLIB::UREM_I64, RTLIB::impl___umoddi3);
+  setLibcallImpl(RTLIB::MUL_I64,  RTLIB::impl___muldi3);
+  setLibcallImpl(RTLIB::SHL_I64,  RTLIB::impl___ashldi3);
+  setLibcallImpl(RTLIB::SRL_I64,  RTLIB::impl___lshrdi3);
+  setLibcallImpl(RTLIB::SRA_I64,  RTLIB::impl___ashrdi3);
+
   // Shifts: legal with barrel-shift (TableGen patterns handle both register and
   // immediate forms). Without barrel-shift, lower to compiler-rt libcalls
   // (__lshlsi3 / __lshrsi3 / __ashrsi3) via Custom lowering; ISD::Expand is
@@ -129,8 +146,10 @@ const char *MicroBlazeTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case MicroBlazeISD::RET_FLAG:     return "MicroBlazeISD::RET_FLAG";
   case MicroBlazeISD::CALL:         return "MicroBlazeISD::CALL";
   case MicroBlazeISD::Wrapper:      return "MicroBlazeISD::Wrapper";
-  case MicroBlazeISD::BR_CC:        return "MicroBlazeISD::BR_CC";
-  case MicroBlazeISD::SELECT_CC:    return "MicroBlazeISD::SELECT_CC";
+  case MicroBlazeISD::BR_CC:         return "MicroBlazeISD::BR_CC";
+  case MicroBlazeISD::SELECT_CC:     return "MicroBlazeISD::SELECT_CC";
+  case MicroBlazeISD::BR_CC_CMPU:    return "MicroBlazeISD::BR_CC_CMPU";
+  case MicroBlazeISD::SELECT_CC_CMPU:return "MicroBlazeISD::SELECT_CC_CMPU";
   }
   return nullptr;
 }
@@ -163,12 +182,39 @@ SDValue MicroBlazeTargetLowering::LowerSELECT_CC(SDValue Op,
   SDValue FalseV = Op.getOperand(3);
   ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(4))->get();
 
-  // MicroBlaze branches test a register against zero, so compute Diff = LHS - RHS.
-  // EmitInstrWithCustomInserter selects the branch opcode from the CC integer.
+  bool IsUnsignedIneq = (CC == ISD::SETUGT || CC == ISD::SETUGE ||
+                         CC == ISD::SETULT || CC == ISD::SETULE);
+  if (IsUnsignedIneq && Subtarget.hasPatternCompare()) {
+    // Use CMPU which sets bit31=1 iff LHS > RHS unsigned (UG984 §5 Fig 84).
+    SDValue CCVal = DAG.getConstant(CC, DL, MVT::i32);
+    return DAG.getNode(MicroBlazeISD::SELECT_CC_CMPU, DL, Op.getValueType(),
+                       TrueV, FalseV, CCVal, LHS, RHS);
+  }
+
+  // Signed and equality comparisons: compute Diff = LHS - RHS.
   SDValue Diff  = DAG.getNode(ISD::SUB, DL, MVT::i32, LHS, RHS);
   SDValue CCVal = DAG.getConstant(CC, DL, MVT::i32);
   return DAG.getNode(MicroBlazeISD::SELECT_CC, DL, Op.getValueType(),
                      TrueV, FalseV, CCVal, Diff);
+}
+
+// Branch opcodes for CMPU-based unsigned comparisons (UG984 §5 Fig 84).
+// CMPU rD, rA, rB sets bit31=1 iff rA > rB unsigned; bits30:0 = rA - rB.
+// Because bit31=1 makes the result appear negative, the branch opcodes are
+// reversed relative to the RSUBK (signed subtraction) path:
+//   SETUGT: bit31=1 (rA > rB) → result<0 → BLTID
+//   SETULT: bit31=0, bits30:0>0 (rA < rB) → result>0 → BGTID
+//   SETUGE: bit31=1 or result=0 → result≤0 → BLEID
+//   SETULE: bit31=0 → result≥0 → BGEID
+static unsigned getMBCmpuBranchOpcodeForCC(ISD::CondCode CC) {
+  switch (CC) {
+  case ISD::SETUGT: return MicroBlaze::BLTID;
+  case ISD::SETULT: return MicroBlaze::BGTID;
+  case ISD::SETUGE: return MicroBlaze::BLEID;
+  case ISD::SETULE: return MicroBlaze::BGEID;
+  default:
+    llvm_unreachable("Expected unsigned inequality CC for CMPU branch");
+  }
 }
 
 // Map ISD::CondCode to the MicroBlaze zero-test branch opcode.
@@ -191,22 +237,19 @@ static unsigned getMBBranchOpcodeForCC(ISD::CondCode CC) {
   }
 }
 
-// Expand SELECT_CC_PSEUDO into a diamond CFG:
+// Shared helper: build the diamond CFG for a conditional select.
+// headMBB gets a conditional branch to sinkMBB (true path); fall-through is
+// the false path.  BranchReg is the register to test; BrOpc is the opcode.
 //
 //   headMBB:
-//     BrOpc DiffReg, sinkMBB   // condition TRUE → branch to sinkMBB
-//     // fall-through → copy0MBB (false value path)
-//   copy0MBB: (empty staging block)
-//     // fall-through → sinkMBB
+//     BrOpc BranchReg, sinkMBB   // condition TRUE → branch to sinkMBB
+//   copy0MBB:                    // false-value staging block (empty)
 //   sinkMBB:
 //     dst = phi [FalseV, copy0MBB], [TrueV, headMBB]
-//
-// MI operands: dst(0) TrueV(1) FalseV(2) CC_imm(3) Diff(4)
-MachineBasicBlock *MicroBlazeTargetLowering::EmitInstrWithCustomInserter(
-    MachineInstr &MI, MachineBasicBlock *BB) const {
-  assert(MI.getOpcode() == MicroBlaze::SELECT_CC_PSEUDO &&
-         "Unknown custom-inserter pseudo");
-
+static MachineBasicBlock *
+emitSelectCCDiamond(MachineInstr &MI, MachineBasicBlock *BB,
+                    unsigned BrOpc, Register BranchReg,
+                    Register DstReg, Register TrueReg, Register FalseReg) {
   DebugLoc DL = MI.getDebugLoc();
   MachineFunction *MF = BB->getParent();
   const TargetInstrInfo &TII = *MF->getSubtarget().getInstrInfo();
@@ -219,30 +262,55 @@ MachineBasicBlock *MicroBlazeTargetLowering::EmitInstrWithCustomInserter(
   MF->insert(It, copy0MBB);
   MF->insert(It, sinkMBB);
 
-  // Transfer instructions after the pseudo and successor edges to sinkMBB.
   sinkMBB->splice(sinkMBB->begin(), headMBB,
                   std::next(MI.getIterator()), headMBB->end());
   sinkMBB->transferSuccessorsAndUpdatePHIs(headMBB);
 
-  ISD::CondCode CC = static_cast<ISD::CondCode>(MI.getOperand(3).getImm());
-  Register DiffReg = MI.getOperand(4).getReg();
-  unsigned BrOpc = getMBBranchOpcodeForCC(CC);
-
-  // headMBB: branch to sinkMBB if condition is TRUE; fall-through = false path.
-  BuildMI(headMBB, DL, TII.get(BrOpc)).addReg(DiffReg).addMBB(sinkMBB);
+  BuildMI(headMBB, DL, TII.get(BrOpc)).addReg(BranchReg).addMBB(sinkMBB);
   headMBB->addSuccessor(copy0MBB);
   headMBB->addSuccessor(sinkMBB);
-
   copy0MBB->addSuccessor(sinkMBB);
 
-  // sinkMBB: phi merges TrueV (from headMBB) and FalseV (from copy0MBB).
-  BuildMI(*sinkMBB, sinkMBB->begin(), DL, TII.get(TargetOpcode::PHI),
-          MI.getOperand(0).getReg())
-      .addReg(MI.getOperand(2).getReg()).addMBB(copy0MBB)
-      .addReg(MI.getOperand(1).getReg()).addMBB(headMBB);
+  BuildMI(*sinkMBB, sinkMBB->begin(), DL, TII.get(TargetOpcode::PHI), DstReg)
+      .addReg(FalseReg).addMBB(copy0MBB)
+      .addReg(TrueReg).addMBB(headMBB);
 
   MI.eraseFromParent();
   return sinkMBB;
+}
+
+// Expand SELECT_CC_PSEUDO / SELECT_CC_CMPU_PSEUDO into diamond CFGs.
+//
+// SELECT_CC_PSEUDO operands:      dst(0) TrueV(1) FalseV(2) CC_imm(3) Diff(4)
+// SELECT_CC_CMPU_PSEUDO operands: dst(0) TrueV(1) FalseV(2) CC_imm(3) LHS(4) RHS(5)
+MachineBasicBlock *MicroBlazeTargetLowering::EmitInstrWithCustomInserter(
+    MachineInstr &MI, MachineBasicBlock *BB) const {
+  if (MI.getOpcode() == MicroBlaze::SELECT_CC_PSEUDO) {
+    ISD::CondCode CC = static_cast<ISD::CondCode>(MI.getOperand(3).getImm());
+    Register DiffReg = MI.getOperand(4).getReg();
+    return emitSelectCCDiamond(MI, BB, getMBBranchOpcodeForCC(CC), DiffReg,
+                               MI.getOperand(0).getReg(),
+                               MI.getOperand(1).getReg(),
+                               MI.getOperand(2).getReg());
+  }
+
+  assert(MI.getOpcode() == MicroBlaze::SELECT_CC_CMPU_PSEUDO &&
+         "Unknown custom-inserter pseudo");
+
+  // Emit CMPU rtemp, LHS, RHS then branch on the CMPU result.
+  DebugLoc DL = MI.getDebugLoc();
+  MachineFunction *MF = BB->getParent();
+  const TargetInstrInfo &TII = *MF->getSubtarget().getInstrInfo();
+  ISD::CondCode CC = static_cast<ISD::CondCode>(MI.getOperand(3).getImm());
+  Register LHSReg = MI.getOperand(4).getReg();
+  Register RHSReg = MI.getOperand(5).getReg();
+  Register CmpuReg = MF->getRegInfo().createVirtualRegister(&MicroBlaze::GPRRegClass);
+  BuildMI(*BB, MI, DL, TII.get(MicroBlaze::CMPU), CmpuReg)
+      .addReg(LHSReg).addReg(RHSReg);
+  return emitSelectCCDiamond(MI, BB, getMBCmpuBranchOpcodeForCC(CC), CmpuReg,
+                             MI.getOperand(0).getReg(),
+                             MI.getOperand(1).getReg(),
+                             MI.getOperand(2).getReg());
 }
 
 SDValue MicroBlazeTargetLowering::LowerShift(SDValue Op,
@@ -269,11 +337,19 @@ SDValue MicroBlazeTargetLowering::LowerBR_CC(SDValue Op,
   SDValue RHS  = Op.getOperand(3);
   SDValue Dest = Op.getOperand(4);
 
-  // Compute LHS - RHS:  RSUBK(RHS, LHS) = LHS - RHS.
-  // We encode this as a sub node; the DAGToDAG selector will emit RSUBK.
+  bool IsUnsignedIneq = (CC == ISD::SETUGT || CC == ISD::SETUGE ||
+                         CC == ISD::SETULT || CC == ISD::SETULE);
+  if (IsUnsignedIneq && Subtarget.hasPatternCompare()) {
+    // Use CMPU which sets bit31=1 iff LHS > RHS unsigned (UG984 §5 Fig 84).
+    // Branch opcodes are reversed from the RSUBK path; DAGToDAG handles this.
+    SDValue CCVal = DAG.getConstant(CC, DL, MVT::i32);
+    return DAG.getNode(MicroBlazeISD::BR_CC_CMPU, DL, MVT::Other,
+                       Chain, CCVal, LHS, RHS, Dest);
+  }
+
+  // Signed and equality comparisons: compute LHS - RHS and branch on sign/zero.
   SDValue Diff = DAG.getNode(ISD::SUB, DL, MVT::i32, LHS, RHS);
   SDValue CCVal = DAG.getConstant(CC, DL, MVT::i32);
-
   return DAG.getNode(MicroBlazeISD::BR_CC, DL, MVT::Other, Chain, CCVal, Diff,
                      Dest);
 }
@@ -391,6 +467,13 @@ SDValue MicroBlazeTargetLowering::LowerCall(
     Callee = DAG.getTargetGlobalAddress(G->getGlobal(), DL, MVT::i32);
   } else if (ExternalSymbolSDNode *E = dyn_cast<ExternalSymbolSDNode>(Callee)) {
     Callee = DAG.getTargetExternalSymbol(E->getSymbol(), MVT::i32);
+  } else {
+    // Indirect call: callee is a function pointer or constant address.
+    // Copy into a virtual register so BRALD r15, rA can select it.
+    Register CalleeReg = MF.getRegInfo().createVirtualRegister(
+        &MicroBlaze::GPRRegClass);
+    Chain = DAG.getCopyToReg(Chain, DL, CalleeReg, Callee, SDValue());
+    Callee = DAG.getRegister(CalleeReg, MVT::i32);
   }
 
   // Build the list of operands and glue.
