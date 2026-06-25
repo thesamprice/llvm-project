@@ -28,29 +28,25 @@
 # CHECK: src r3, r5                 # encoding: [0x21,0x00,0x65,0x90]
   src r3, r5
 
-# srl r3, r5  — func=0x041 = 0b01000000001
-# byte1 = {00000, func[10:8]=010} = 0b00000010 = 0x02
-# byte0 = func[7:0] = 0b00000001 = 0x01
-
-# Wait: func=0x041=65: bits 10..0 = 0,1,0,0,0,0,0,0,0,0,1
-# bit10=0, bit9=1, bit8=0, bit7=0..bit1=0, bit0=1
-# byte1[15:8] = {rB[4:0]=0,func[10:8]=010} = 0b00000010 = 0x02
-# byte0[7:0]  = func[7:0] = 0b00000001 = 0x01
-# Word: 0x90650201 → LE: 01 02 65 90
-# CHECK: srl r3, r5                 # encoding: [0x01,0x02,0x65,0x90]
+# srl r3, r5  — func=0x041 = 65 = 0b00001000001 (11 bits)
+# bit10..bit7=0, bit6=1, bit5..bit1=0, bit0=1
+# byte1[15:8] = {rB[4:0]=0, func[10:8]=000} = 0x00
+# byte0[7:0]  = func[7:0] = 0b01000001 = 0x41
+# Word: 0x90650041 → LE: 41 00 65 90
+# CHECK: srl r3, r5                 # encoding: [0x41,0x00,0x65,0x90]
   srl r3, r5
 
-# sext8 r3, r5  — func=0x060 = 0b01100000000
-# bit10=0, bit9=1, bit8=1, bit7..bit0=0
-# byte1 = {00000, 011} = 0b00000011 = 0x03
-# byte0 = 0b00000000 = 0x00
-# Word: 0x90650300 → LE: 00 03 65 90
-# CHECK: sext8 r3, r5              # encoding: [0x00,0x03,0x65,0x90]
+# sext8 r3, r5  — func=0x060 = 96 = 0b00001100000 (11 bits)
+# bit10..bit7=0, bit6=1, bit5=1, bit4..bit0=0
+# byte1[15:8] = {rB[4:0]=0, func[10:8]=000} = 0x00
+# byte0[7:0]  = func[7:0] = 0b01100000 = 0x60
+# Word: 0x90650060 → LE: 60 00 65 90
+# CHECK: sext8 r3, r5              # encoding: [0x60,0x00,0x65,0x90]
   sext8 r3, r5
 
-# sext16 r3, r5  — func=0x061 = 0b01100000001
-# byte1 = {00000, 011} = 0x03
-# byte0 = 0b00000001 = 0x01
-# Word: 0x90650301 → LE: 01 03 65 90
-# CHECK: sext16 r3, r5             # encoding: [0x01,0x03,0x65,0x90]
+# sext16 r3, r5  — func=0x061 = 97 = 0b00001100001 (11 bits)
+# bit6=1, bit5=1, bit0=1; rest 0
+# byte1 = 0x00, byte0 = 0b01100001 = 0x61
+# Word: 0x90650061 → LE: 61 00 65 90
+# CHECK: sext16 r3, r5             # encoding: [0x61,0x00,0x65,0x90]
   sext16 r3, r5
