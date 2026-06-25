@@ -121,3 +121,4 @@ def IMM : MBB<0x2C, (outs), (ins simm16:$imm), "imm\t$imm", []> {
   let rD = 0;
   let rA = 0;
 }
+include "MicroBlazeInstrALU.td"
