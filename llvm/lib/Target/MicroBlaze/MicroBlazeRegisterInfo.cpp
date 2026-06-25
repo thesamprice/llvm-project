@@ -41,10 +41,8 @@ MicroBlazeRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
 
   // R0  — hardwired zero, never allocatable.
   Reserved.set(MicroBlaze::R0);
-  Reserved.set(MicroBlaze::ZERO);
   // R1  — stack pointer.
   Reserved.set(MicroBlaze::R1);
-  Reserved.set(MicroBlaze::SP);
   // R2  — read-only small-data anchor (_SDA2_BASE_).
   Reserved.set(MicroBlaze::R2);
   // R13 — read-write small-data anchor (_SDA_BASE_).
@@ -55,15 +53,12 @@ MicroBlazeRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   Reserved.set(MicroBlaze::R17);
   // R15 — link register (return address).
   Reserved.set(MicroBlaze::R15);
-  Reserved.set(MicroBlaze::LR);
   // R18 — assembler temporary, reserved by ABI.
   Reserved.set(MicroBlaze::R18);
 
-  // R19 / FP — only reserved when the frame pointer is actually in use.
-  if (MF.getSubtarget<MicroBlazeSubtarget>().getFrameLowering()->hasFP(MF)) {
+  // R19 — only reserved when the frame pointer is actually in use.
+  if (MF.getSubtarget<MicroBlazeSubtarget>().getFrameLowering()->hasFP(MF))
     Reserved.set(MicroBlaze::R19);
-    Reserved.set(MicroBlaze::FP);
-  }
 
   return Reserved;
 }
@@ -76,8 +71,21 @@ bool MicroBlazeRegisterInfo::requiresRegisterScavenging(
 bool MicroBlazeRegisterInfo::eliminateFrameIndex(
     MachineBasicBlock::iterator II, int SPAdj, unsigned FIOperandNum,
     RegScavenger *RS) const {
-  // Implemented in Commit 6 (frame lowering).
-  report_fatal_error("MicroBlazeRegisterInfo::eliminateFrameIndex not yet implemented");
+  MachineInstr &MI = *II;
+  MachineFunction &MF = *MI.getParent()->getParent();
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+
+  int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
+  // Offset from the stack pointer to the start of this frame object.
+  // MachineFrameInfo::getObjectOffset returns offset relative to the
+  // bottom of the fixed-object area; add stack size to get SP-relative.
+  int64_t Offset = MFI.getObjectOffset(FrameIndex) + MFI.getStackSize() +
+                   MI.getOperand(FIOperandNum + 1).getImm() + SPAdj;
+
+  // Replace the FrameIndex operand with R1 (stack pointer).
+  MI.getOperand(FIOperandNum).ChangeToRegister(MicroBlaze::R1, /*isDef=*/false);
+  MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
+  return false;
 }
 
 Register

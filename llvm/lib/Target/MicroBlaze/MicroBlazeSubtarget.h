@@ -10,8 +10,10 @@
 #define LLVM_LIB_TARGET_MICROBLAZE_MICROBLAZESUBTARGET_H
 
 #include "MicroBlazeFrameLowering.h"
+#include "MicroBlazeISelLowering.h"
 #include "MicroBlazeInstrInfo.h"
 #include "MicroBlazeRegisterInfo.h"
+#include "llvm/CodeGen/SelectionDAGTargetInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DataLayout.h"
 #include <string>
@@ -29,12 +31,16 @@ class MicroBlazeSubtarget : public MicroBlazeGenSubtargetInfo {
   bool HasBarrelShift = false;
   bool HasMultiplyHigh = false;
   bool HasPatternCompare = false;
+  bool HasDivide = false;
+  bool HasReorderInstr = false;
   bool HasHardFloat = false;
   bool HasFloatConvert = false;
 
+  SelectionDAGTargetInfo TSI;
   MicroBlazeInstrInfo InstrInfo;
   MicroBlazeRegisterInfo RegInfo;
   MicroBlazeFrameLowering FrameLowering;
+  MicroBlazeTargetLowering TLInfo;
 
 public:
   MicroBlazeSubtarget(const Triple &TT, StringRef CPU, StringRef FS,
@@ -51,10 +57,18 @@ public:
   const MicroBlazeFrameLowering *getFrameLowering() const override {
     return &FrameLowering;
   }
+  const MicroBlazeTargetLowering *getTargetLowering() const override {
+    return &TLInfo;
+  }
+  const SelectionDAGTargetInfo *getSelectionDAGInfo() const override {
+    return &TSI;
+  }
 
   bool hasBarrelShift() const { return HasBarrelShift; }
   bool hasMultiplyHigh() const { return HasMultiplyHigh; }
   bool hasPatternCompare() const { return HasPatternCompare; }
+  bool hasDivide() const { return HasDivide; }
+  bool hasReorderInstr() const { return HasReorderInstr; }
   bool hasHardFloat() const { return HasHardFloat; }
   bool hasFloatConvert() const { return HasFloatConvert; }
 };

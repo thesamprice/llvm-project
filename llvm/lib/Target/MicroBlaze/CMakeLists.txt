@@ -6,13 +6,20 @@ tablegen(LLVM MicroBlazeGenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM MicroBlazeGenSubtargetInfo.inc -gen-subtarget)
 tablegen(LLVM MicroBlazeGenCallingConv.inc -gen-callingconv)
 tablegen(LLVM MicroBlazeGenInstrInfo.inc -gen-instr-info)
+tablegen(LLVM MicroBlazeGenAsmWriter.inc -gen-asm-writer)
+tablegen(LLVM MicroBlazeGenAsmMatcher.inc -gen-asm-matcher)
+tablegen(LLVM MicroBlazeGenMCCodeEmitter.inc -gen-emitter)
+tablegen(LLVM MicroBlazeGenDAGISel.inc -gen-dag-isel)
 
 add_public_tablegen_target(MicroBlazeCommonTableGen)
 
 add_llvm_target(MicroBlazeCodeGen
+  MicroBlazeAsmPrinter.cpp
   MicroBlazeFrameLowering.cpp
+  MicroBlazeISelDAGToDAG.cpp
   MicroBlazeISelLowering.cpp
   MicroBlazeInstrInfo.cpp
+  MicroBlazeMCInstLower.cpp
   MicroBlazeRegisterInfo.cpp
   MicroBlazeSubtarget.cpp
   MicroBlazeTargetMachine.cpp
@@ -34,5 +41,6 @@ add_llvm_target(MicroBlazeCodeGen
   MicroBlaze
   )
 
+add_subdirectory(AsmParser)
 add_subdirectory(MCTargetDesc)
 add_subdirectory(TargetInfo)
