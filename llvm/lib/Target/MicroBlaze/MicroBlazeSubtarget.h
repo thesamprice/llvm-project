@@ -29,6 +29,7 @@ class MicroBlazeSubtarget : public MicroBlazeGenSubtargetInfo {
   bool HasBarrelShift = false;
   bool HasMultiplyHigh = false;
   bool HasPatternCompare = false;
+  bool HasDivide = false;
   bool HasHardFloat = false;
   bool HasFloatConvert = false;
 
@@ -55,6 +56,7 @@ public:
   bool hasBarrelShift() const { return HasBarrelShift; }
   bool hasMultiplyHigh() const { return HasMultiplyHigh; }
   bool hasPatternCompare() const { return HasPatternCompare; }
+  bool hasDivide() const { return HasDivide; }
   bool hasHardFloat() const { return HasHardFloat; }
   bool hasFloatConvert() const { return HasFloatConvert; }
 };

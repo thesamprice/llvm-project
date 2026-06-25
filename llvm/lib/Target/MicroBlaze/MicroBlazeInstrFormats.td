@@ -30,6 +30,8 @@ def HasMultiplyHighPred : Predicate<"Subtarget->hasMultiplyHigh()">,
     AssemblerPredicate<(all_of FeatureMultiplyHigh), "multiply-high">;
 def HasPatternComparePred : Predicate<"Subtarget->hasPatternCompare()">,
     AssemblerPredicate<(all_of FeaturePatternCompare), "pattern-compare">;
+def HasDividePred : Predicate<"Subtarget->hasDivide()">,
+    AssemblerPredicate<(all_of FeatureDivide), "divide">;
 
 //===----------------------------------------------------------------------===//
 // Base instruction class
