@@ -21,6 +21,9 @@ def FeatureMultiplyHigh : SubtargetFeature<"multiply-high", "HasMultiplyHigh",
 def FeaturePatternCompare : SubtargetFeature<"pattern-compare", "HasPatternCompare",
     "true", "Enable pattern-compare instructions (cmp, cmpu)">;
 
+def FeatureDivide : SubtargetFeature<"divide", "HasDivide",
+    "true", "Enable hardware integer divide instructions (idiv, idivu)">;
+
 def FeatureHardFloat : SubtargetFeature<"hard-float", "HasHardFloat",
     "true", "Enable hardware floating-point instructions">;
 
