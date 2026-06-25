@@ -112,6 +112,15 @@ class MicroBlazeAsmParser : public MCTargetAsmParser {
                                uint64_t &ErrorInfo,
                                bool MatchingInlineAsm) override;
   ParseStatus parseDirective(AsmToken DirectiveID) override {
+    StringRef IDVal = DirectiveID.getString();
+    // GNU assembler emits .ent/.end as function-boundary markers and .set for
+    // symbol attributes. They carry no machine code; accept and skip them so
+    // assembly files written for GNU as (e.g. picolibc setjmp.S) assemble
+    // cleanly with LLVM's integrated assembler.
+    if (IDVal == ".ent" || IDVal == ".end" || IDVal == ".set") {
+      Parser.eatToEndOfStatement();
+      return ParseStatus::Success;
+    }
     return ParseStatus::NoMatch;
   }
   unsigned validateTargetOperandClass(MCParsedAsmOperand &Op,
