@@ -34,6 +34,14 @@ def MBCall : SDNode<"MicroBlazeISD::CALL", SDT_MBCall,
 
 def MBWrapper : SDNode<"MicroBlazeISD::Wrapper", SDTIntUnaryOp>;
 
+// MBSelectCC: (TrueV, FalseV, CC_imm, Diff) → result
+// Diff = LHS - RHS; CC_imm is an ISD::CondCode integer constant.
+// Expanded to a diamond CFG by EmitInstrWithCustomInserter.
+def SDT_MBSelectCC : SDTypeProfile<1, 4, [
+    SDTCisSameAs<0, 1>, SDTCisSameAs<1, 2>,
+    SDTCisVT<3, i32>, SDTCisVT<4, i32>]>;
+def MBSelectCC : SDNode<"MicroBlazeISD::SELECT_CC", SDT_MBSelectCC, []>;
+
 //===----------------------------------------------------------------------===//
 // Immediate patterns and address-mode complex patterns
 //===----------------------------------------------------------------------===//
@@ -121,6 +129,7 @@ def IMM : MBB<0x2C, (outs), (ins simm16:$imm), "imm\t$imm", []> {
   let rD = 0;
   let rA = 0;
 }
+
 include "MicroBlazeInstrALU.td"
 include "MicroBlazeInstrMem.td"
 include "MicroBlazeInstrBranch.td"
@@ -136,3 +145,4 @@ include "MicroBlazeInstrAtomics.td"
 include "MicroBlazeInstrReorder.td"
 include "MicroBlazeInstrCache.td"
 include "MicroBlazeInstrFPU.td"
+

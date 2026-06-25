@@ -15,8 +15,8 @@
 //   SRA   0x001 = 0b00000000001  — arithmetic right shift by 1; MSR.C ← bit[0]
 //   SRC   0x021 = 0b00000100001  — shift right through carry (MSR.C in/out)
 //   SRL   0x041 = 0b01000000001  — logical right shift by 1; MSR.C ← bit[0]
-//   SEXT8  0x060 = 0b01100000000 — sign-extend byte (bits[7:0] → bits[31:0])
-//   SEXT16 0x061 = 0b01100000001 — sign-extend halfword (bits[15:0] → bits[31:0])
+//   SEXT8  0x060 = 0b00001100000 — sign-extend byte (bits[7:0] → bits[31:0])
+//   SEXT16 0x061 = 0b00001100001 — sign-extend halfword (bits[15:0] → bits[31:0])
 //===----------------------------------------------------------------------===//
 
 // SRA/SRC/SRL all read or write MSR.C (the carry bit), which is not modeled
@@ -41,12 +41,14 @@ def SRL_   : MBA<0x24, 0x041, (outs GPR:$rD), (ins GPR:$rA),
 
 // SEXT8 Rd, Ra — Rd = sign_extend_8(Ra)  (func 0x060).
 def SEXT8  : MBA<0x24, 0x060, (outs GPR:$rD), (ins GPR:$rA),
-                 "sext8\t$rD, $rA", []> {
+                 "sext8\t$rD, $rA",
+                 [(set GPR:$rD, (sext_inreg GPR:$rA, i8))]> {
   let rB = 0;
 }
 
 // SEXT16 Rd, Ra — Rd = sign_extend_16(Ra)  (func 0x061).
 def SEXT16 : MBA<0x24, 0x061, (outs GPR:$rD), (ins GPR:$rA),
-                 "sext16\t$rD, $rA", []> {
+                 "sext16\t$rD, $rA",
+                 [(set GPR:$rD, (sext_inreg GPR:$rA, i16))]> {
   let rB = 0;
 }

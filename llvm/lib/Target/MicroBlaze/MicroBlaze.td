@@ -51,7 +51,9 @@ defm : RemapAllTargetPseudoPointerOperands<GPR>;
 // MicroBlaze processors supported
 //===----------------------------------------------------------------------===//
 
-def : ProcessorModel<"generic", NoSchedModel, []>;
+// generic: matches the default hardware configuration shipped by AMD/Xilinx,
+// which includes the pattern-compare unit (cmp/cmpu) in all standard builds.
+def : ProcessorModel<"generic", NoSchedModel, [FeaturePatternCompare]>;
 def : ProcessorModel<"v11.0", NoSchedModel,
     [FeatureBarrelShift, FeatureMultiplyHigh, FeaturePatternCompare]>;
 

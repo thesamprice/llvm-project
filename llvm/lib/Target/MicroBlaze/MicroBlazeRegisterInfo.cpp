@@ -73,8 +73,21 @@ bool MicroBlazeRegisterInfo::requiresRegisterScavenging(
 bool MicroBlazeRegisterInfo::eliminateFrameIndex(
     MachineBasicBlock::iterator II, int SPAdj, unsigned FIOperandNum,
     RegScavenger *RS) const {
-  // Implemented in Commit 6 (frame lowering).
-  report_fatal_error("MicroBlazeRegisterInfo::eliminateFrameIndex not yet implemented");
+  MachineInstr &MI = *II;
+  MachineFunction &MF = *MI.getParent()->getParent();
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+
+  int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
+  // Offset from the stack pointer to the start of this frame object.
+  // MachineFrameInfo::getObjectOffset returns offset relative to the
+  // bottom of the fixed-object area; add stack size to get SP-relative.
+  int64_t Offset = MFI.getObjectOffset(FrameIndex) + MFI.getStackSize() +
+                   MI.getOperand(FIOperandNum + 1).getImm() + SPAdj;
+
+  // Replace the FrameIndex operand with R1 (stack pointer).
+  MI.getOperand(FIOperandNum).ChangeToRegister(MicroBlaze::R1, /*isDef=*/false);
+  MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
+  return false;
 }
 
 Register
