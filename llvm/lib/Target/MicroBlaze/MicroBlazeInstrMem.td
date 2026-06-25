@@ -131,13 +131,17 @@ def SB : MBA<0x34, 0, (outs), (ins GPR:$rD, memrr:$addr),
 def : Pat<(i32 (load ADDRri:$addr)), (LWI ADDRri:$addr)>;
 def : Pat<(i32 (load ADDRrr:$addr)), (LW  ADDRrr:$addr)>;
 
-// Load half-word (zero-extend).
+// Load half-word (zero-extend and anyext — LHUI always zero-extends).
 def : Pat<(i32 (zextloadi16 ADDRri:$addr)), (LHUI ADDRri:$addr)>;
 def : Pat<(i32 (zextloadi16 ADDRrr:$addr)), (LHU  ADDRrr:$addr)>;
+def : Pat<(i32 (extloadi16  ADDRri:$addr)), (LHUI ADDRri:$addr)>;
+def : Pat<(i32 (extloadi16  ADDRrr:$addr)), (LHU  ADDRrr:$addr)>;
 
-// Load byte (zero-extend).
+// Load byte (zero-extend and anyext — LBUI always zero-extends).
 def : Pat<(i32 (zextloadi8 ADDRri:$addr)), (LBUI ADDRri:$addr)>;
 def : Pat<(i32 (zextloadi8 ADDRrr:$addr)), (LBU  ADDRrr:$addr)>;
+def : Pat<(i32 (extloadi8  ADDRri:$addr)), (LBUI ADDRri:$addr)>;
+def : Pat<(i32 (extloadi8  ADDRrr:$addr)), (LBU  ADDRrr:$addr)>;
 
 // Store word.
 def : Pat<(store i32:$rd, ADDRri:$addr), (SWI GPR:$rd, ADDRri:$addr)>;

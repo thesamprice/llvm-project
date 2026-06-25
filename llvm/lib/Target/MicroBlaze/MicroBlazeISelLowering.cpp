@@ -16,6 +16,7 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/RuntimeLibcallUtil.h"
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/CodeGen/SelectionDAGNodes.h"
 #include "llvm/IR/GlobalValue.h"
@@ -47,11 +48,22 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   setOperationAction(ISD::SDIVREM, MVT::i32, Expand);
   setOperationAction(ISD::UDIVREM, MVT::i32, Expand);
 
-  // Shifts: legal only with barrel-shift; otherwise expand to loops.
+  // Shifts: legal with barrel-shift (TableGen patterns handle both register and
+  // immediate forms). Without barrel-shift, lower to compiler-rt libcalls
+  // (__lshlsi3 / __lshrsi3 / __ashrsi3) via Custom lowering; ISD::Expand is
+  // intentionally avoided because its ExpandNode path mishandles scalar shifts
+  // in release builds (asserts VT.isVector() which is disabled in release).
   if (!STI.hasBarrelShift()) {
-    setOperationAction(ISD::SHL, MVT::i32, Expand);
-    setOperationAction(ISD::SRL, MVT::i32, Expand);
-    setOperationAction(ISD::SRA, MVT::i32, Expand);
+    // Register the libcall implementations explicitly; MicroBlaze is not in
+    // LLVM's LegacyDefaultSystemLibrary predicate, so the RuntimeLibcallsInfo
+    // table leaves them as Unsupported unless we set them here.
+    setLibcallImpl(RTLIB::SHL_I32, RTLIB::impl___ashlsi3);
+    setLibcallImpl(RTLIB::SRL_I32, RTLIB::impl___lshrsi3);
+    setLibcallImpl(RTLIB::SRA_I32, RTLIB::impl___ashrsi3);
+
+    setOperationAction(ISD::SHL, MVT::i32, Custom);
+    setOperationAction(ISD::SRL, MVT::i32, Custom);
+    setOperationAction(ISD::SRA, MVT::i32, Custom);
   }
 
   // MUL is always available; high-word variants need +multiply-high.
@@ -112,9 +124,27 @@ SDValue MicroBlazeTargetLowering::LowerOperation(SDValue Op,
   case ISD::GlobalAddress:  return LowerGlobalAddress(Op, DAG);
   case ISD::ExternalSymbol: return LowerExternalSymbol(Op, DAG);
   case ISD::BR_CC:          return LowerBR_CC(Op, DAG);
+  case ISD::SHL:
+  case ISD::SRL:
+  case ISD::SRA:            return LowerShift(Op, DAG);
   default:
     llvm_unreachable("Unexpected custom lowering");
   }
+}
+
+SDValue MicroBlazeTargetLowering::LowerShift(SDValue Op,
+                                              SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  RTLIB::Libcall LC;
+  switch (Op.getOpcode()) {
+  case ISD::SHL: LC = RTLIB::getSHL(MVT::i32); break;
+  case ISD::SRL: LC = RTLIB::getSRL(MVT::i32); break;
+  case ISD::SRA: LC = RTLIB::getSRA(MVT::i32); break;
+  default: llvm_unreachable("Unexpected shift opcode");
+  }
+  SDValue Ops[] = {Op.getOperand(0), Op.getOperand(1)};
+  MakeLibCallOptions CallOptions;
+  return makeLibCall(DAG, LC, MVT::i32, Ops, CallOptions, DL).first;
 }
 
 SDValue MicroBlazeTargetLowering::LowerBR_CC(SDValue Op,

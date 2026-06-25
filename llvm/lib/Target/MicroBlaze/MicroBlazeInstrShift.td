@@ -39,12 +39,14 @@ def SRL_   : MBA<0x24, 0x041, (outs GPR:$rD), (ins GPR:$rA),
 
 // SEXT8 Rd, Ra — Rd = sign_extend_8(Ra)  (func 0x060).
 def SEXT8  : MBA<0x24, 0x060, (outs GPR:$rD), (ins GPR:$rA),
-                 "sext8\t$rD, $rA", []> {
+                 "sext8\t$rD, $rA",
+                 [(set GPR:$rD, (sext_inreg GPR:$rA, i8))]> {
   let rB = 0;
 }
 
 // SEXT16 Rd, Ra — Rd = sign_extend_16(Ra)  (func 0x061).
 def SEXT16 : MBA<0x24, 0x061, (outs GPR:$rD), (ins GPR:$rA),
-                 "sext16\t$rD, $rA", []> {
+                 "sext16\t$rD, $rA",
+                 [(set GPR:$rD, (sext_inreg GPR:$rA, i16))]> {
   let rB = 0;
 }

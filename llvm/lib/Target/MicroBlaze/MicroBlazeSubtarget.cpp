@@ -16,10 +16,18 @@
 
 using namespace llvm;
 
+// Call ParseSubtargetFeatures before any member that queries feature bits
+// (TLInfo constructor reads hasBarrelShift() etc., so features must be set first).
+static MicroBlazeSubtarget &
+initSubtargetDependencies(StringRef CPU, StringRef FS,
+                          MicroBlazeSubtarget &STI) {
+  STI.ParseSubtargetFeatures(CPU, CPU, FS);
+  return STI;
+}
+
 MicroBlazeSubtarget::MicroBlazeSubtarget(const Triple &TT, StringRef CPU,
                                          StringRef FS,
                                          const MicroBlazeTargetMachine &TM)
     : MicroBlazeGenSubtargetInfo(TT, CPU, /*TuneCPU=*/CPU, FS),
-      InstrInfo(*this), FrameLowering(*this), TLInfo(TM, *this) {
-  ParseSubtargetFeatures(CPU, CPU, FS);
-}
+      InstrInfo(initSubtargetDependencies(CPU, FS, *this)),
+      FrameLowering(*this), TLInfo(TM, *this) {}

@@ -56,6 +56,7 @@ private:
   SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerExternalSymbol(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerShift(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
 };
