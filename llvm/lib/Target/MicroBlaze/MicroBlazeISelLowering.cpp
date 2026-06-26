@@ -102,9 +102,21 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
     setOperationAction(ISD::UMUL_LOHI, MVT::i32, Expand);
   }
 
+  // _Bool is stored as a byte; promote i1 ext-loads to i8 so the existing
+  // zextloadi8/extloadi8 patterns can select them.
+  setLoadExtAction(ISD::ZEXTLOAD, MVT::i32, MVT::i1,  Promote);
+  setLoadExtAction(ISD::EXTLOAD,  MVT::i32, MVT::i1,  Promote);
+  setLoadExtAction(ISD::SEXTLOAD, MVT::i32, MVT::i1,  Expand);
+
   // No sign-extending loads (only zero-extend for bytes/halves).
   setLoadExtAction(ISD::SEXTLOAD, MVT::i32, MVT::i8,  Expand);
   setLoadExtAction(ISD::SEXTLOAD, MVT::i32, MVT::i16, Expand);
+
+  // No native sign-extension instruction. Expand to SHL+SRA pairs; with
+  // +barrel-shift those select as bsll/bsra, otherwise they lower to libcalls.
+  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i1,  Expand);
+  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i8,  Expand);
+  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16, Expand);
 
   // No floating-point without hard-float feature.
   if (!STI.hasHardFloat()) {
@@ -148,6 +160,8 @@ const char *MicroBlazeTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case MicroBlazeISD::Wrapper:      return "MicroBlazeISD::Wrapper";
   case MicroBlazeISD::BR_CC:         return "MicroBlazeISD::BR_CC";
   case MicroBlazeISD::SELECT_CC:     return "MicroBlazeISD::SELECT_CC";
+  case MicroBlazeISD::BR_CC_CMP:     return "MicroBlazeISD::BR_CC_CMP";
+  case MicroBlazeISD::SELECT_CC_CMP: return "MicroBlazeISD::SELECT_CC_CMP";
   case MicroBlazeISD::BR_CC_CMPU:    return "MicroBlazeISD::BR_CC_CMPU";
   case MicroBlazeISD::SELECT_CC_CMPU:return "MicroBlazeISD::SELECT_CC_CMPU";
   }
@@ -182,30 +196,49 @@ SDValue MicroBlazeTargetLowering::LowerSELECT_CC(SDValue Op,
   SDValue FalseV = Op.getOperand(3);
   ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(4))->get();
 
-  bool IsUnsignedIneq = (CC == ISD::SETUGT || CC == ISD::SETUGE ||
-                         CC == ISD::SETULT || CC == ISD::SETULE);
-  if (IsUnsignedIneq && Subtarget.hasPatternCompare()) {
-    // Use CMPU which sets bit31=1 iff LHS > RHS unsigned (UG984 §5 Fig 84).
+  if (Subtarget.hasPatternCompare()) {
+    bool IsUnsignedIneq = (CC == ISD::SETUGT || CC == ISD::SETUGE ||
+                           CC == ISD::SETULT || CC == ISD::SETULE);
     SDValue CCVal = DAG.getConstant(CC, DL, MVT::i32);
-    return DAG.getNode(MicroBlazeISD::SELECT_CC_CMPU, DL, Op.getValueType(),
+    if (IsUnsignedIneq)
+      return DAG.getNode(MicroBlazeISD::SELECT_CC_CMPU, DL, Op.getValueType(),
+                         TrueV, FalseV, CCVal, LHS, RHS);
+    return DAG.getNode(MicroBlazeISD::SELECT_CC_CMP, DL, Op.getValueType(),
                        TrueV, FalseV, CCVal, LHS, RHS);
   }
 
-  // Signed and equality comparisons: compute Diff = LHS - RHS.
+  // Fallback: subtract and branch on sign/zero.
   SDValue Diff  = DAG.getNode(ISD::SUB, DL, MVT::i32, LHS, RHS);
   SDValue CCVal = DAG.getConstant(CC, DL, MVT::i32);
   return DAG.getNode(MicroBlazeISD::SELECT_CC, DL, Op.getValueType(),
                      TrueV, FalseV, CCVal, Diff);
 }
 
+// Branch opcodes for CMP-based signed comparisons (UG984 §5).
+// CMP rD, rA, rB sets bit31=1 iff rA > rB signed; bits30:0 = rB - rA.
+// Because bit31=1 means rA>rB, the branch opcodes are swapped vs. the
+// subtraction (RSUBK) path where diff=LHS-RHS and LT fires when diff<0:
+//   SETLT: want fire when LHS<RHS → bit31=0, bits30:0>0 → result>0 → BGTID
+//   SETLE: want fire when LHS≤RHS → result≥0 → BGEID
+//   SETGT: want fire when LHS>RHS → bit31=1 → result<0 → BLTID
+//   SETGE: want fire when LHS≥RHS → result≤0 → BLEID
+static unsigned getMBCmpBranchOpcodeForCC(ISD::CondCode CC) {
+  switch (CC) {
+  case ISD::SETEQ:  return MicroBlaze::BEQID;
+  case ISD::SETNE:  return MicroBlaze::BNEID;
+  case ISD::SETLT:  return MicroBlaze::BGTID;
+  case ISD::SETLE:  return MicroBlaze::BGEID;
+  case ISD::SETGT:  return MicroBlaze::BLTID;
+  case ISD::SETGE:  return MicroBlaze::BLEID;
+  default:
+    llvm_unreachable("Expected signed CC for CMP branch");
+  }
+}
+
 // Branch opcodes for CMPU-based unsigned comparisons (UG984 §5 Fig 84).
-// CMPU rD, rA, rB sets bit31=1 iff rA > rB unsigned; bits30:0 = rA - rB.
-// Because bit31=1 makes the result appear negative, the branch opcodes are
-// reversed relative to the RSUBK (signed subtraction) path:
-//   SETUGT: bit31=1 (rA > rB) → result<0 → BLTID
-//   SETULT: bit31=0, bits30:0>0 (rA < rB) → result>0 → BGTID
-//   SETUGE: bit31=1 or result=0 → result≤0 → BLEID
-//   SETULE: bit31=0 → result≥0 → BGEID
+// CMPU rD, rA, rB sets bit31=1 iff rA > rB unsigned; bits30:0 = rB - rA.
+// Same structural rule as CMP: bit31=1 when rA>rB, so opcodes are swapped
+// vs. the subtraction path.
 static unsigned getMBCmpuBranchOpcodeForCC(ISD::CondCode CC) {
   switch (CC) {
   case ISD::SETUGT: return MicroBlaze::BLTID;
@@ -279,9 +312,10 @@ emitSelectCCDiamond(MachineInstr &MI, MachineBasicBlock *BB,
   return sinkMBB;
 }
 
-// Expand SELECT_CC_PSEUDO / SELECT_CC_CMPU_PSEUDO into diamond CFGs.
+// Expand SELECT_CC_PSEUDO / SELECT_CC_CMP_PSEUDO / SELECT_CC_CMPU_PSEUDO.
 //
 // SELECT_CC_PSEUDO operands:      dst(0) TrueV(1) FalseV(2) CC_imm(3) Diff(4)
+// SELECT_CC_CMP_PSEUDO operands:  dst(0) TrueV(1) FalseV(2) CC_imm(3) LHS(4) RHS(5)
 // SELECT_CC_CMPU_PSEUDO operands: dst(0) TrueV(1) FalseV(2) CC_imm(3) LHS(4) RHS(5)
 MachineBasicBlock *MicroBlazeTargetLowering::EmitInstrWithCustomInserter(
     MachineInstr &MI, MachineBasicBlock *BB) const {
@@ -294,16 +328,27 @@ MachineBasicBlock *MicroBlazeTargetLowering::EmitInstrWithCustomInserter(
                                MI.getOperand(2).getReg());
   }
 
-  assert(MI.getOpcode() == MicroBlaze::SELECT_CC_CMPU_PSEUDO &&
-         "Unknown custom-inserter pseudo");
-
-  // Emit CMPU rtemp, LHS, RHS then branch on the CMPU result.
   DebugLoc DL = MI.getDebugLoc();
   MachineFunction *MF = BB->getParent();
   const TargetInstrInfo &TII = *MF->getSubtarget().getInstrInfo();
   ISD::CondCode CC = static_cast<ISD::CondCode>(MI.getOperand(3).getImm());
   Register LHSReg = MI.getOperand(4).getReg();
   Register RHSReg = MI.getOperand(5).getReg();
+
+  if (MI.getOpcode() == MicroBlaze::SELECT_CC_CMP_PSEUDO) {
+    // CMP rD, LHS, RHS: bit31 = 1 iff LHS > RHS signed; use CMP-specific opcodes.
+    Register CmpReg = MF->getRegInfo().createVirtualRegister(&MicroBlaze::GPRRegClass);
+    BuildMI(*BB, MI, DL, TII.get(MicroBlaze::CMP), CmpReg)
+        .addReg(LHSReg).addReg(RHSReg);
+    return emitSelectCCDiamond(MI, BB, getMBCmpBranchOpcodeForCC(CC), CmpReg,
+                               MI.getOperand(0).getReg(),
+                               MI.getOperand(1).getReg(),
+                               MI.getOperand(2).getReg());
+  }
+
+  assert(MI.getOpcode() == MicroBlaze::SELECT_CC_CMPU_PSEUDO &&
+         "Unknown custom-inserter pseudo");
+  // CMPU rD, LHS, RHS: bit31 = 1 iff LHS > RHS unsigned; branch opcodes reversed.
   Register CmpuReg = MF->getRegInfo().createVirtualRegister(&MicroBlaze::GPRRegClass);
   BuildMI(*BB, MI, DL, TII.get(MicroBlaze::CMPU), CmpuReg)
       .addReg(LHSReg).addReg(RHSReg);
@@ -337,17 +382,21 @@ SDValue MicroBlazeTargetLowering::LowerBR_CC(SDValue Op,
   SDValue RHS  = Op.getOperand(3);
   SDValue Dest = Op.getOperand(4);
 
-  bool IsUnsignedIneq = (CC == ISD::SETUGT || CC == ISD::SETUGE ||
-                         CC == ISD::SETULT || CC == ISD::SETULE);
-  if (IsUnsignedIneq && Subtarget.hasPatternCompare()) {
-    // Use CMPU which sets bit31=1 iff LHS > RHS unsigned (UG984 §5 Fig 84).
-    // Branch opcodes are reversed from the RSUBK path; DAGToDAG handles this.
+  if (Subtarget.hasPatternCompare()) {
+    bool IsUnsignedIneq = (CC == ISD::SETUGT || CC == ISD::SETUGE ||
+                           CC == ISD::SETULT || CC == ISD::SETULE);
     SDValue CCVal = DAG.getConstant(CC, DL, MVT::i32);
-    return DAG.getNode(MicroBlazeISD::BR_CC_CMPU, DL, MVT::Other,
+    if (IsUnsignedIneq)
+      // CMPU: bit31=1 iff LHS > RHS unsigned; branch opcodes reversed.
+      return DAG.getNode(MicroBlazeISD::BR_CC_CMPU, DL, MVT::Other,
+                         Chain, CCVal, LHS, RHS, Dest);
+    // CMP: bit31=1 iff LHS < RHS signed (overflow-safe); branch opcodes direct.
+    return DAG.getNode(MicroBlazeISD::BR_CC_CMP, DL, MVT::Other,
                        Chain, CCVal, LHS, RHS, Dest);
   }
 
-  // Signed and equality comparisons: compute LHS - RHS and branch on sign/zero.
+  // Fallback (no pattern-compare unit): subtract and branch on sign/zero.
+  // Note: signed overflow can produce wrong results for SETLT/GT/LE/GE.
   SDValue Diff = DAG.getNode(ISD::SUB, DL, MVT::i32, LHS, RHS);
   SDValue CCVal = DAG.getConstant(CC, DL, MVT::i32);
   return DAG.getNode(MicroBlazeISD::BR_CC, DL, MVT::Other, Chain, CCVal, Diff,

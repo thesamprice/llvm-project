@@ -93,8 +93,8 @@ bool MicroBlazeDAGToDAGISel::SelectADDRrr(SDValue Addr, SDValue &Base,
 //===----------------------------------------------------------------------===//
 
 // Map ISD condition codes to MicroBlaze conditional-branch opcodes.
-// MicroBlaze branches test a register against zero: BEQID = 0, BLTID < 0, etc.
-// The register operand should be LHS - RHS.
+// The register operand is LHS - RHS (subtraction-based path, BR_CC).
+// BLTID fires when reg < 0, BGTID when reg > 0, etc.
 static unsigned getBranchOpcodeForCC(ISD::CondCode CC) {
   switch (CC) {
   case ISD::SETEQ:  return MicroBlaze::BEQID;
@@ -103,14 +103,28 @@ static unsigned getBranchOpcodeForCC(ISD::CondCode CC) {
   case ISD::SETLE:  return MicroBlaze::BLEID;
   case ISD::SETGT:  return MicroBlaze::BGTID;
   case ISD::SETGE:  return MicroBlaze::BGEID;
-  // Unsigned: invert operand order for signed arithmetic approximation.
-  // For now, fall through to signed variants (TODO: use CMPU).
   case ISD::SETULT: return MicroBlaze::BLTID;
   case ISD::SETULE: return MicroBlaze::BLEID;
   case ISD::SETUGT: return MicroBlaze::BGTID;
   case ISD::SETUGE: return MicroBlaze::BGEID;
   default:
     llvm_unreachable("Unsupported condition code for MicroBlaze branch");
+  }
+}
+
+// Map signed ISD condition codes to MicroBlaze branch opcodes for the CMP path.
+// CMP rD, rA, rB sets bit31=1 iff rA > rB signed; bits30:0 = rB - rA.
+// So rD > 0 when rA < rB, rD < 0 when rA > rB, rD == 0 when rA == rB.
+static unsigned getCmpBranchOpcodeForCC(ISD::CondCode CC) {
+  switch (CC) {
+  case ISD::SETEQ:  return MicroBlaze::BEQID;
+  case ISD::SETNE:  return MicroBlaze::BNEID;
+  case ISD::SETLT:  return MicroBlaze::BGTID;
+  case ISD::SETLE:  return MicroBlaze::BGEID;
+  case ISD::SETGT:  return MicroBlaze::BLTID;
+  case ISD::SETGE:  return MicroBlaze::BLEID;
+  default:
+    llvm_unreachable("Expected signed CC for CMP branch");
   }
 }
 
@@ -147,6 +161,27 @@ void MicroBlazeDAGToDAGISel::Select(SDNode *Node) {
     unsigned BrOp = getBranchOpcodeForCC(CC);
     SDNode *Selected = CurDAG->getMachineNode(BrOp, DL, MVT::Other,
                                               {DiffVal, Dest, Chain});
+    ReplaceNode(Node, Selected);
+    return;
+  }
+
+  // Handle MicroBlazeISD::BR_CC_CMP: (chain, cc_const, LHS, RHS, dest_bb)
+  // CMP rD, LHS, RHS: bit31=1 iff LHS > RHS signed (overflow-safe).
+  // Use getCmpBranchOpcodeForCC (LT↔GT, LE↔GE swapped vs subtraction path).
+  if (Node->getOpcode() == MicroBlazeISD::BR_CC_CMP) {
+    SDLoc DL(Node);
+    ISD::CondCode CC = static_cast<ISD::CondCode>(
+        cast<ConstantSDNode>(Node->getOperand(1))->getZExtValue());
+    SDValue LHS   = Node->getOperand(2);
+    SDValue RHS   = Node->getOperand(3);
+    SDValue Dest  = Node->getOperand(4);
+    SDValue Chain = Node->getOperand(0);
+    SDNode *CmpNode = CurDAG->getMachineNode(MicroBlaze::CMP, DL, MVT::i32,
+                                             {LHS, RHS});
+    SDValue CmpResult(CmpNode, 0);
+    unsigned BrOp = getCmpBranchOpcodeForCC(CC);
+    SDNode *Selected = CurDAG->getMachineNode(BrOp, DL, MVT::Other,
+                                             {CmpResult, Dest, Chain});
     ReplaceNode(Node, Selected);
     return;
   }

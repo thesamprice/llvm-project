@@ -134,6 +134,24 @@ def SELECT_CC_PSEUDO : MBPseudo<
     "#SELECT_CC $dst, $T, $F, $CC, $Diff",
     [(set i32:$dst, (MBSelectCC i32:$T, i32:$F, imm:$CC, i32:$Diff))]>;
 
+// SELECT_CC_CMP_PSEUDO: CMP-based signed conditional select.
+// Operands: dst, TrueV, FalseV, CC (ISD::CondCode imm), LHS, RHS.
+// EmitInstrWithCustomInserter emits CMP LHS, RHS (bit31=1 iff LHS>RHS)
+// and branches using getMBCmpBranchOpcodeForCC (LT↔GT, LE↔GE swapped).
+// MBSelectCCCmp: (TrueV, FalseV, CC_imm, LHS, RHS) → result
+def SDT_MBSelectCCCmp : SDTypeProfile<1, 5, [
+    SDTCisSameAs<0, 1>, SDTCisSameAs<1, 2>,
+    SDTCisVT<3, i32>, SDTCisVT<4, i32>, SDTCisVT<5, i32>]>;
+def MBSelectCCCmp : SDNode<"MicroBlazeISD::SELECT_CC_CMP", SDT_MBSelectCCCmp, []>;
+
+let usesCustomInserter = 1, Predicates = [HasPatternComparePred] in
+def SELECT_CC_CMP_PSEUDO : MBPseudo<
+    (outs GPR:$dst),
+    (ins GPR:$T, GPR:$F, i32imm:$CC, GPR:$LHS, GPR:$RHS),
+    "#SELECT_CC_CMP $dst, $T, $F, $CC, $LHS, $RHS",
+    [(set i32:$dst,
+      (MBSelectCCCmp i32:$T, i32:$F, imm:$CC, i32:$LHS, i32:$RHS))]>;
+
 // SELECT_CC_CMPU_PSEUDO: CMPU-based unsigned conditional select.
 // Operands: dst, TrueV, FalseV, CC (ISD::CondCode imm), LHS, RHS.
 // EmitInstrWithCustomInserter emits CMPU LHS, RHS and branches on the result.
