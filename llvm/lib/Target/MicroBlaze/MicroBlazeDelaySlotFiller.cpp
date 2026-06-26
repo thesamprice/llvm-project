@@ -6,19 +6,29 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// MicroBlaze branches and returns have a one-instruction delay slot.
-// This pass inserts a NOP into every unfilled delay slot.  Slot filling
-// (hoisting the preceding instruction into the slot) is left as a
-// follow-on optimization.
+// MicroBlaze branches and returns have a one-instruction delay slot (UG984 §5).
+// The delay slot executes unconditionally after the branch instruction but
+// before the branch target is entered.  Importantly, the branch evaluates its
+// condition register *before* the delay slot runs, so the delay slot may freely
+// write registers that the branch reads — EXCEPT for loop backedges where the
+// same branch fires again on the next iteration.  To be safe we never hoist an
+// instruction that defines a register the branch reads (conservative rule that
+// avoids first-iteration undefined-register bugs on backedges).
+//
+// The filler scans backward from each delay-slot branch within the same basic
+// block for the first instruction that is safe to hoist.  If none is found it
+// inserts a NOP.
 //
 //===----------------------------------------------------------------------===//
 
 #include "MicroBlaze.h"
 #include "MicroBlazeInstrInfo.h"
 #include "MicroBlazeSubtarget.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 
 #define GET_INSTRINFO_ENUM
 #include "MicroBlazeGenInstrInfo.inc"
@@ -34,29 +44,7 @@ struct MicroBlazeDelaySlotFiller : public MachineFunctionPass {
 
   MicroBlazeDelaySlotFiller() : MachineFunctionPass(ID) {}
 
-  bool runOnMachineFunction(MachineFunction &MF) override {
-    const TargetInstrInfo *TII =
-        MF.getSubtarget<MicroBlazeSubtarget>().getInstrInfo();
-    bool Changed = false;
-
-    for (MachineBasicBlock &MBB : MF) {
-      for (auto I = MBB.begin(); I != MBB.end(); ++I) {
-        if (!I->hasDelaySlot())
-          continue;
-
-        // Delay slot is the instruction immediately following the branch/return.
-        // Insert a NOP there.  The NOP executes in the delay slot before the
-        // branch target is entered (per UG984 Ch.5 delay-slot semantics).
-        auto InsertPt = std::next(I);
-        BuildMI(MBB, InsertPt, DebugLoc(), TII->get(MicroBlaze::NOP));
-        Changed = true;
-
-        // Skip over the newly inserted NOP so we don't revisit it.
-        ++I;
-      }
-    }
-    return Changed;
-  }
+  bool runOnMachineFunction(MachineFunction &MF) override;
 
   StringRef getPassName() const override {
     return "MicroBlaze delay slot filler";
@@ -64,6 +52,136 @@ struct MicroBlazeDelaySlotFiller : public MachineFunctionPass {
 };
 
 } // namespace
+
+// Collect all register numbers explicitly read/written by MI into the sets.
+// MicroBlaze has no sub-registers, so MCPhysReg identity is sufficient.
+static void collectRegs(const MachineInstr &MI,
+                        SmallSet<MCPhysReg, 8> &Defs,
+                        SmallSet<MCPhysReg, 8> &Uses) {
+  for (const MachineOperand &MO : MI.operands()) {
+    if (!MO.isReg() || !MO.getReg().isPhysical())
+      continue;
+    MCPhysReg R = MO.getReg().asMCReg();
+    if (MO.isDef())
+      Defs.insert(R);
+    else
+      Uses.insert(R);
+  }
+}
+
+// Return true if Sets A and B share any element.
+static bool overlaps(const SmallSet<MCPhysReg, 8> &A,
+                     const SmallSet<MCPhysReg, 8> &B) {
+  for (MCPhysReg R : A)
+    if (B.count(R))
+      return true;
+  return false;
+}
+
+// Try to find an instruction earlier in MBB that can be legally moved into the
+// delay slot immediately after BranchIt.  If found, splice it there and return
+// true.  Otherwise return false (caller should insert a NOP).
+static bool tryFillSlot(MachineBasicBlock &MBB,
+                        MachineBasicBlock::iterator BranchIt,
+                        const TargetInstrInfo *TII) {
+  // Registers explicitly defined by the branch (e.g. R15 for brald/bralid).
+  // A hoisted instruction must not write these — it would clobber the branch's
+  // output (the saved return address for calls).
+  SmallSet<MCPhysReg, 8> BranchDefs, BranchUses;
+  collectRegs(*BranchIt, BranchDefs, BranchUses);
+
+  // Hazard sets that grow as we walk backward past each instruction between the
+  // current candidate and the branch.
+  SmallSet<MCPhysReg, 8> DefsAfter; // regs written by instructions after cand
+  SmallSet<MCPhysReg, 8> UsesAfter; // regs read    by instructions after cand
+
+  if (BranchIt == MBB.begin())
+    return false;
+
+  auto I = BranchIt;
+  while (I != MBB.begin()) {
+    --I;
+    MachineInstr &MI = *I;
+
+    // Stop at anything that cannot be safely bypassed.
+    if (MI.isBranch() || MI.isCall() || MI.isReturn() || MI.hasDelaySlot())
+      return false;
+
+    // Stores may have observable side effects; don't try to move them past
+    // other instructions.
+    if (MI.mayStore())
+      return false;
+
+    // Loads are generally fine to hoist as long as register hazards are clear.
+    // (MicroBlaze memory is not reordered relative to other instructions in the
+    // delay slot — the delay slot just executes one cycle later.)
+
+    SmallSet<MCPhysReg, 8> CandDefs, CandUses;
+    collectRegs(MI, CandDefs, CandUses);
+
+    // WAW hazard: MI defines a reg that a later instruction also defines.
+    // Moving MI after those instructions would leave the wrong final value.
+    if (overlaps(CandDefs, DefsAfter))
+      goto next;
+
+    // WAR hazard: MI defines a reg that a later instruction reads.
+    // Moving MI after those instructions would change what they read.
+    if (overlaps(CandDefs, UsesAfter))
+      goto next;
+
+    // RAW hazard: MI reads a reg that a later instruction writes.
+    // Moving MI after those instructions would make MI read a new value.
+    if (overlaps(CandUses, DefsAfter))
+      goto next;
+
+    // MI must not define a reg the branch also defines (e.g. both writing R15).
+    if (overlaps(CandDefs, BranchDefs))
+      goto next;
+
+    // Conservative backedge guard: do not hoist an instruction that defines a
+    // register the branch reads.  On a loop backedge the branch would read
+    // the delay-slot value on the *next* iteration but an uninitialized value
+    // on the *first* iteration.
+    if (overlaps(CandDefs, BranchUses))
+      goto next;
+
+    {
+      // MI is safe to hoist: splice it into the delay slot position.
+      auto InsertPt = std::next(BranchIt);
+      MBB.splice(InsertPt, &MBB, I);
+      return true;
+    }
+
+  next:
+    // Accumulate hazards so we can check candidates further back.
+    for (MCPhysReg R : CandDefs) DefsAfter.insert(R);
+    for (MCPhysReg R : CandUses) UsesAfter.insert(R);
+  }
+  return false;
+}
+
+bool MicroBlazeDelaySlotFiller::runOnMachineFunction(MachineFunction &MF) {
+  const TargetInstrInfo *TII =
+      MF.getSubtarget<MicroBlazeSubtarget>().getInstrInfo();
+  bool Changed = false;
+
+  for (MachineBasicBlock &MBB : MF) {
+    for (auto I = MBB.begin(); I != MBB.end(); ++I) {
+      if (!I->hasDelaySlot())
+        continue;
+
+      if (!tryFillSlot(MBB, I, TII)) {
+        // No candidate found — insert a NOP.
+        auto InsertPt = std::next(I);
+        BuildMI(MBB, InsertPt, DebugLoc(), TII->get(MicroBlaze::NOP));
+      }
+      Changed = true;
+      // Either way the delay slot instruction is now at std::next(I); skip it.
+      ++I;
+    }
+  }
+  return Changed;
+}
 
 char MicroBlazeDelaySlotFiller::ID = 0;
 
