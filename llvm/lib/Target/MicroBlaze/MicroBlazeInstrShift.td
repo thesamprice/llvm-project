@@ -15,8 +15,8 @@
 //   SRA   0x001 = 0b00000000001  — arithmetic right shift by 1; MSR.C ← bit[0]
 //   SRC   0x021 = 0b00000100001  — shift right through carry (MSR.C in/out)
 //   SRL   0x041 = 0b01000000001  — logical right shift by 1; MSR.C ← bit[0]
-//   SEXT8  0x060 = 0b01100000000 — sign-extend byte (bits[7:0] → bits[31:0])
-//   SEXT16 0x061 = 0b01100000001 — sign-extend halfword (bits[15:0] → bits[31:0])
+//   SEXT8  0x060 = 0b00001100000 — sign-extend byte (bits[7:0] → bits[31:0])
+//   SEXT16 0x061 = 0b00001100001 — sign-extend halfword (bits[15:0] → bits[31:0])
 //===----------------------------------------------------------------------===//
 
 // SRA Rd, Ra — Rd = sra(Ra, 1); MSR.C = Ra[0]  (opcode 0x24, func 0x001).

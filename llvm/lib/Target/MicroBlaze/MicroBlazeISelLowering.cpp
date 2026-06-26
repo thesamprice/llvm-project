@@ -110,14 +110,14 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   setLoadExtAction(ISD::SEXTLOAD, MVT::i32, MVT::i1,  Expand);
 
   // No sign-extending loads (only zero-extend for bytes/halves).
+  // Expand to zero-extending load + sext8/sext16.
   setLoadExtAction(ISD::SEXTLOAD, MVT::i32, MVT::i8,  Expand);
   setLoadExtAction(ISD::SEXTLOAD, MVT::i32, MVT::i16, Expand);
 
-  // No native sign-extension instruction. Expand to SHL+SRA pairs; with
-  // +barrel-shift those select as bsll/bsra, otherwise they lower to libcalls.
+  // sext8/sext16 are base-ISA instructions (UG984 Figs 129-130).
   setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i1,  Expand);
-  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i8,  Expand);
-  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16, Expand);
+  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i8,  Legal);
+  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16, Legal);
 
   // Without hard-float, all floating-point operations are done via libcalls.
   // Expand both f32 and f64 operations; the legalizer emits calls to the

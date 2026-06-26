@@ -1,10 +1,10 @@
 ; RUN: llc -mtriple=microblazeel < %s | FileCheck %s
 
-; max(a, b): if a > b return a else return b.
-; ISel inverts the condition for fall-through: SETEQ(a,b) inverts to SETLE(b,a).
+; max(a, b): uses cmp + bgeid (branch-if->=0 in delay slot).
+; cmp rD,rA,rB sets bit31=1 when rA>rB; bgeid branches when rD>=0 (i.e. a<=b).
 ; CHECK-LABEL: max:
-; CHECK: rsubk r3, r6, r5
-; CHECK: bleid r3
+; CHECK: cmp r3, r5, r6
+; CHECK: bgeid r3
 ; CHECK: bri
 ; CHECK: rtsd r15, 8
 ; CHECK: rtsd r15, 8
@@ -17,10 +17,10 @@ else:
   ret i32 %b
 }
 
-; min(a, b): if a < b return a else return b.
+; min(a, b): uses cmp + bleid (branch-if-<=0).
 ; CHECK-LABEL: min:
-; CHECK: rsubk r3, r6, r5
-; CHECK: bgeid r3
+; CHECK: cmp r3, r5, r6
+; CHECK: bleid r3
 ; CHECK: bri
 ; CHECK: rtsd r15, 8
 ; CHECK: rtsd r15, 8
