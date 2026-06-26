@@ -220,7 +220,12 @@ void MicroBlazeMCCodeEmitter::encodeInstruction(
       const MCOperand &MO = MI.getOperand(i);
       if (MO.isExpr()) {
         SymExpr = MO.getExpr();
-        NeedsIMM = true;
+        // PC-relative branches (brtarget operands) use the 16-bit short form:
+        // no IMM prefix, FIXUP_MICROBLAZE_32_PCREL resolves the 16-bit offset.
+        // All other symbolic operands (absolute addresses, calls) use the long
+        // form (IMM + instruction pair, FIXUP_MICROBLAZE_64 / 64_PCREL).
+        if (!IsPCRel)
+          NeedsIMM = true;
       } else if (MO.isImm()) {
         ImmVal = MO.getImm();
         if (!isInt<16>(ImmVal))
@@ -237,6 +242,16 @@ void MicroBlazeMCCodeEmitter::encodeInstruction(
     // Symbolic fixups from the sub-operand encoder are no longer needed
     // (the IMM-prefix fixup covers the pair); drop them.
     InstrFixups.clear();
+  } else if (IsPCRel && SymExpr) {
+    // Short PC-relative branch: no IMM prefix needed.
+    // Drop the placeholder fixup from getMachineOpValue and record the real one.
+    // FIXUP_MICROBLAZE_32_PCREL patches bits[15:0] of the branch instruction
+    // (LE bytes 0-1) with the signed 16-bit offset (target - branch_PC).
+    // Branch range is ±32 KB; the assembler errors if the symbol is out of range.
+    InstrFixups.clear();
+    Fixups.push_back(MCFixup::create(CB.size(), SymExpr,
+                                     MCFixupKind(MicroBlaze::FIXUP_MICROBLAZE_32_PCREL),
+                                     /*PCRel=*/true));
   }
 
   // Adjust fixup offsets to be relative to start of *this* instruction word.
