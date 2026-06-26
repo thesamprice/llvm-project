@@ -55,3 +55,19 @@ void MicroBlazeInstrInfo::loadRegFromStackSlot(
       .addImm(0)
       .setMIFlag(Flags);
 }
+
+// Tail-merger calls this only for unconditional branches (Cond is always empty
+// because analyzeBranch returned true for all conditional cases).  Emit BRI
+// and let the delay-slot filler add the NOP.
+unsigned MicroBlazeInstrInfo::insertBranch(MachineBasicBlock &MBB,
+                                            MachineBasicBlock *TBB,
+                                            MachineBasicBlock *FBB,
+                                            ArrayRef<MachineOperand> Cond,
+                                            const DebugLoc &DL,
+                                            int *BytesAdded) const {
+  assert(TBB && !FBB && Cond.empty() && "Only unconditional branch supported");
+  BuildMI(&MBB, DL, get(MicroBlaze::BRI)).addMBB(TBB);
+  if (BytesAdded)
+    *BytesAdded = 4;
+  return 1;
+}

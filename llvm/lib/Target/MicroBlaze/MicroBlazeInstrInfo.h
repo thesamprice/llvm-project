@@ -45,6 +45,24 @@ public:
                             Register VReg, unsigned SubReg = 0,
                             MachineInstr::MIFlag Flags =
                                 MachineInstr::NoFlags) const override;
+
+  // Return true (cannot analyze) to prevent the branch folder from
+  // tail-merging or removing conditional branches around delay slots.
+  bool analyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
+                     MachineBasicBlock *&FBB,
+                     SmallVectorImpl<MachineOperand> &Cond,
+                     bool AllowModify = false) const override {
+    return true;
+  }
+
+  // The tail-merger calls insertBranch to redirect merged tails via an
+  // unconditional branch.  The delay-slot filler (which runs later) will
+  // fill the one delay slot with a NOP if needed.
+  unsigned insertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
+                        MachineBasicBlock *FBB,
+                        ArrayRef<MachineOperand> Cond,
+                        const DebugLoc &DL,
+                        int *BytesAdded = nullptr) const override;
 };
 
 } // namespace llvm
