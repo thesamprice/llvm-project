@@ -17,7 +17,7 @@
 
 // LWI  Rd, Ra, imm — load word     (opcode=0x3A)
 def LWI  : MBB<0x3A, (outs GPR:$rD), (ins memri:$addr),
-               "lwi\t$rD, $addr", []> {
+               "lwi\t$rD, $addr", [], IIC_LD> {
   bits<21> addr;
   let rA  = addr{20-16};
   let imm = addr{15-0};
@@ -25,7 +25,7 @@ def LWI  : MBB<0x3A, (outs GPR:$rD), (ins memri:$addr),
 
 // LHUI Rd, Ra, imm — load halfword unsigned  (opcode=0x39)
 def LHUI : MBB<0x39, (outs GPR:$rD), (ins memri:$addr),
-               "lhui\t$rD, $addr", []> {
+               "lhui\t$rD, $addr", [], IIC_LD> {
   bits<21> addr;
   let rA  = addr{20-16};
   let imm = addr{15-0};
@@ -33,7 +33,7 @@ def LHUI : MBB<0x39, (outs GPR:$rD), (ins memri:$addr),
 
 // LBUI Rd, Ra, imm — load byte unsigned  (opcode=0x38)
 def LBUI : MBB<0x38, (outs GPR:$rD), (ins memri:$addr),
-               "lbui\t$rD, $addr", []> {
+               "lbui\t$rD, $addr", [], IIC_LD> {
   bits<21> addr;
   let rA  = addr{20-16};
   let imm = addr{15-0};
@@ -45,7 +45,7 @@ def LBUI : MBB<0x38, (outs GPR:$rD), (ins memri:$addr),
 
 // LW Rd, Ra, Rb — load word  (opcode=0x32, func=0)
 def LW   : MBA<0x32, 0, (outs GPR:$rD), (ins memrr:$addr),
-               "lw\t$rD, $addr", []> {
+               "lw\t$rD, $addr", [], IIC_LD> {
   bits<10> addr;   // [9:5]=rA [4:0]=rB
   let rA = addr{9-5};
   let rB = addr{4-0};
@@ -53,7 +53,7 @@ def LW   : MBA<0x32, 0, (outs GPR:$rD), (ins memrr:$addr),
 
 // LHU Rd, Ra, Rb — load halfword unsigned  (opcode=0x31, func=0)
 def LHU  : MBA<0x31, 0, (outs GPR:$rD), (ins memrr:$addr),
-               "lhu\t$rD, $addr", []> {
+               "lhu\t$rD, $addr", [], IIC_LD> {
   bits<10> addr;
   let rA = addr{9-5};
   let rB = addr{4-0};
@@ -61,7 +61,7 @@ def LHU  : MBA<0x31, 0, (outs GPR:$rD), (ins memrr:$addr),
 
 // LBU Rd, Ra, Rb — load byte unsigned  (opcode=0x30, func=0)
 def LBU  : MBA<0x30, 0, (outs GPR:$rD), (ins memrr:$addr),
-               "lbu\t$rD, $addr", []> {
+               "lbu\t$rD, $addr", [], IIC_LD> {
   bits<10> addr;
   let rA = addr{9-5};
   let rB = addr{4-0};
@@ -73,7 +73,7 @@ def LBU  : MBA<0x30, 0, (outs GPR:$rD), (ins memrr:$addr),
 
 // SWI Rd, Ra, imm — store word  (opcode=0x3E)
 def SWI : MBB<0x3E, (outs), (ins GPR:$rD, memri:$addr),
-              "swi\t$rD, $addr", []> {
+              "swi\t$rD, $addr", [], IIC_ST> {
   bits<21> addr;
   let rA  = addr{20-16};
   let imm = addr{15-0};
@@ -81,7 +81,7 @@ def SWI : MBB<0x3E, (outs), (ins GPR:$rD, memri:$addr),
 
 // SHI Rd, Ra, imm — store halfword  (opcode=0x3D)
 def SHI : MBB<0x3D, (outs), (ins GPR:$rD, memri:$addr),
-              "shi\t$rD, $addr", []> {
+              "shi\t$rD, $addr", [], IIC_ST> {
   bits<21> addr;
   let rA  = addr{20-16};
   let imm = addr{15-0};
@@ -89,7 +89,7 @@ def SHI : MBB<0x3D, (outs), (ins GPR:$rD, memri:$addr),
 
 // SBI Rd, Ra, imm — store byte  (opcode=0x3C)
 def SBI : MBB<0x3C, (outs), (ins GPR:$rD, memri:$addr),
-              "sbi\t$rD, $addr", []> {
+              "sbi\t$rD, $addr", [], IIC_ST> {
   bits<21> addr;
   let rA  = addr{20-16};
   let imm = addr{15-0};
@@ -101,7 +101,7 @@ def SBI : MBB<0x3C, (outs), (ins GPR:$rD, memri:$addr),
 
 // SW Rd, Ra, Rb — store word  (opcode=0x36, func=0)
 def SW : MBA<0x36, 0, (outs), (ins GPR:$rD, memrr:$addr),
-             "sw\t$rD, $addr", []> {
+             "sw\t$rD, $addr", [], IIC_ST> {
   bits<10> addr;
   let rA = addr{9-5};
   let rB = addr{4-0};
@@ -109,7 +109,7 @@ def SW : MBA<0x36, 0, (outs), (ins GPR:$rD, memrr:$addr),
 
 // SH Rd, Ra, Rb — store halfword  (opcode=0x35, func=0)
 def SH : MBA<0x35, 0, (outs), (ins GPR:$rD, memrr:$addr),
-             "sh\t$rD, $addr", []> {
+             "sh\t$rD, $addr", [], IIC_ST> {
   bits<10> addr;
   let rA = addr{9-5};
   let rB = addr{4-0};
@@ -117,7 +117,7 @@ def SH : MBA<0x35, 0, (outs), (ins GPR:$rD, memrr:$addr),
 
 // SB Rd, Ra, Rb — store byte  (opcode=0x34, func=0)
 def SB : MBA<0x34, 0, (outs), (ins GPR:$rD, memrr:$addr),
-             "sb\t$rD, $addr", []> {
+             "sb\t$rD, $addr", [], IIC_ST> {
   bits<10> addr;
   let rA = addr{9-5};
   let rB = addr{4-0};

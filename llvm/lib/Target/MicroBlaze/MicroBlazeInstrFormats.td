@@ -66,8 +66,9 @@ class MBInst<dag outs, dag ins, string asmstr, list<dag> pattern,
 //===----------------------------------------------------------------------===//
 
 class MBA<bits<6> op, bits<11> func,
-          dag outs, dag ins, string asmstr, list<dag> pattern>
-    : MBInst<outs, ins, asmstr, pattern> {
+          dag outs, dag ins, string asmstr, list<dag> pattern,
+          InstrItinClass itin = IIC_ALU>
+    : MBInst<outs, ins, asmstr, pattern, itin> {
   bits<5> rD;
   bits<5> rA;
   bits<5> rB;
@@ -84,8 +85,9 @@ class MBA<bits<6> op, bits<11> func,
 //===----------------------------------------------------------------------===//
 
 class MBB<bits<6> op,
-          dag outs, dag ins, string asmstr, list<dag> pattern>
-    : MBInst<outs, ins, asmstr, pattern> {
+          dag outs, dag ins, string asmstr, list<dag> pattern,
+          InstrItinClass itin = IIC_ALU>
+    : MBInst<outs, ins, asmstr, pattern, itin> {
   bits<5>  rD;
   bits<5>  rA;
   bits<16> imm;
@@ -112,8 +114,9 @@ class MBPseudo<dag outs, dag ins, string asmstr, list<dag> pattern>
 //   [8:5]=0  [4:0]=shamt5
 // S=1: shift left; T=1: arithmetic; not a Type B — imm prefix has no effect.
 //===----------------------------------------------------------------------===//
-class MBBSI<bit S, bit T, dag outs, dag ins, string asmstr, list<dag> pattern>
-    : MBInst<outs, ins, asmstr, pattern> {
+class MBBSI<bit S, bit T, dag outs, dag ins, string asmstr, list<dag> pattern,
+            InstrItinClass itin = IIC_ALU>
+    : MBInst<outs, ins, asmstr, pattern, itin> {
   bits<5> rD;
   bits<5> rA;
   bits<5> shamt;
@@ -134,8 +137,9 @@ class MBBSI<bit S, bit T, dag outs, dag ins, string asmstr, list<dag> pattern>
 //   [10:6]=IMMW  [5]=0  [4:0]=IMMS
 // E=1: extract field; I=1: insert field; IMMW=end bit index, IMMS=shift amount.
 //===----------------------------------------------------------------------===//
-class MBBSF<bit I, bit E, dag outs, dag ins, string asmstr, list<dag> pattern>
-    : MBInst<outs, ins, asmstr, pattern> {
+class MBBSF<bit I, bit E, dag outs, dag ins, string asmstr, list<dag> pattern,
+            InstrItinClass itin = IIC_ALU>
+    : MBInst<outs, ins, asmstr, pattern, itin> {
   bits<5> rD;
   bits<5> rA;
   bits<5> immw;
@@ -158,8 +162,9 @@ class MBBSF<bit I, bit E, dag outs, dag ins, string asmstr, list<dag> pattern>
 //   [13:0]=rS_addr (14-bit SPR address)
 //===----------------------------------------------------------------------===//
 
-class MBMFS<bit E, dag outs, dag ins, string asmstr, list<dag> pattern>
-    : MBInst<outs, ins, asmstr, pattern> {
+class MBMFS<bit E, dag outs, dag ins, string asmstr, list<dag> pattern,
+            InstrItinClass itin = IIC_SPR>
+    : MBInst<outs, ins, asmstr, pattern, itin> {
   bits<5>  rD;
   bits<14> rs;
 
@@ -179,8 +184,9 @@ class MBMFS<bit E, dag outs, dag ins, string asmstr, list<dag> pattern>
 //   [13:0]=rS_addr (14-bit SPR address)
 //===----------------------------------------------------------------------===//
 
-class MBMTS<bit E, dag outs, dag ins, string asmstr, list<dag> pattern>
-    : MBInst<outs, ins, asmstr, pattern> {
+class MBMTS<bit E, dag outs, dag ins, string asmstr, list<dag> pattern,
+            InstrItinClass itin = IIC_SPR>
+    : MBInst<outs, ins, asmstr, pattern, itin> {
   bits<5>  rA;
   bits<14> rs;
 
@@ -200,8 +206,9 @@ class MBMTS<bit E, dag outs, dag ins, string asmstr, list<dag> pattern>
 //   [14:0]=Imm15
 //===----------------------------------------------------------------------===//
 
-class MBMSR<bit clr, dag outs, dag ins, string asmstr, list<dag> pattern>
-    : MBInst<outs, ins, asmstr, pattern> {
+class MBMSR<bit clr, dag outs, dag ins, string asmstr, list<dag> pattern,
+            InstrItinClass itin = IIC_SPR>
+    : MBInst<outs, ins, asmstr, pattern, itin> {
   bits<5>  rD;
   bits<15> imm;
 

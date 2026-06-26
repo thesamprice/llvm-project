@@ -30,9 +30,9 @@ def XOR_  : MBA<0x22, 0, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
 def ANDN  : MBA<0x23, 0, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
                 "andn\t$rD, $rA, $rB", []>;
 
-// MUL Rd, Ra, Rb (opcode=0x10)
+// MUL Rd, Ra, Rb (opcode=0x10) — 3-cycle latency (pipelined multiplier, C_AREA_OPTIMIZED=0)
 def MUL_  : MBA<0x10, 0, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                "mul\t$rD, $rA, $rB", []>;
+                "mul\t$rD, $rA, $rB", [], IIC_MUL>;
 
 //===----------------------------------------------------------------------===//
 // ALU — register/immediate (Type B)
@@ -55,9 +55,9 @@ def ANDI_  : MBB<0x29, (outs GPR:$rD), (ins GPR:$rA, simm16:$imm),
 def XORI_  : MBB<0x2A, (outs GPR:$rD), (ins GPR:$rA, simm16:$imm),
                  "xori\t$rD, $rA, $imm", []>;
 
-// MULI Rd, Ra, imm16 (opcode=0x18). UG984 Ch.5 (muli=011000).
+// MULI Rd, Ra, imm16 (opcode=0x18) — 3-cycle latency (same multiplier as MUL).
 def MULI_  : MBB<0x18, (outs GPR:$rD), (ins GPR:$rA, simm16:$imm),
-                 "muli\t$rD, $rA, $imm", []>;
+                 "muli\t$rD, $rA, $imm", [], IIC_MUL>;
 
 //===----------------------------------------------------------------------===//
 // Barrel-shift instructions (require +barrel-shift, opcode=0x11)
@@ -80,11 +80,11 @@ let Predicates = [HasBarrelShiftPred] in {
 
 let Predicates = [HasMultiplyHighPred] in {
   def MULH   : MBA<0x10, 0b00000000001, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                   "mulh\t$rD, $rA, $rB", []>;
+                   "mulh\t$rD, $rA, $rB", [], IIC_MUL>;
   def MULHU  : MBA<0x10, 0b00000000011, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                   "mulhu\t$rD, $rA, $rB", []>;
+                   "mulhu\t$rD, $rA, $rB", [], IIC_MUL>;
   def MULHSU : MBA<0x10, 0b00000000010, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                   "mulhsu\t$rD, $rA, $rB", []>;
+                   "mulhsu\t$rD, $rA, $rB", [], IIC_MUL>;
 }
 
 //===----------------------------------------------------------------------===//

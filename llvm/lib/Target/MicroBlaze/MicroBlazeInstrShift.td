@@ -37,6 +37,12 @@ def SRL_   : MBA<0x24, 0x041, (outs GPR:$rD), (ins GPR:$rA),
   let rB = 0;
 }
 
+// SelectionDAG patterns for single-bit shifts.
+// SRL covers srl-by-1, SRA covers sra-by-1.  Multi-bit shifts on base
+// MicroBlaze (no barrel-shift) fall back to compiler-rt libcalls.
+def : Pat<(srl i32:$ra, (i32 1)), (SRL_ GPR:$ra)>;
+def : Pat<(sra i32:$ra, (i32 1)), (SRA_ GPR:$ra)>;
+
 // SEXT8 Rd, Ra — Rd = sign_extend_8(Ra)  (func 0x060).
 def SEXT8  : MBA<0x24, 0x060, (outs GPR:$rD), (ins GPR:$rA),
                  "sext8\t$rD, $rA",

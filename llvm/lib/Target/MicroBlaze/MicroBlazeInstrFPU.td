@@ -25,28 +25,28 @@
 
 let Predicates = [HasHardFloatPred], hasSideEffects = 1 in {
   def FADD  : MBA<0x16, 0x000, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                  "fadd\t$rD, $rA, $rB", []>;
+                  "fadd\t$rD, $rA, $rB", [], IIC_FPU>;
   def FRSUB : MBA<0x16, 0x080, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                  "frsub\t$rD, $rA, $rB", []>;
+                  "frsub\t$rD, $rA, $rB", [], IIC_FPU>;
   def FMUL  : MBA<0x16, 0x100, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                  "fmul\t$rD, $rA, $rB", []>;
+                  "fmul\t$rD, $rA, $rB", [], IIC_FPU>;
   def FDIV  : MBA<0x16, 0x180, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                  "fdiv\t$rD, $rA, $rB", []>;
+                  "fdiv\t$rD, $rA, $rB", [], IIC_FPU>;
 
   def FCMP_UN : MBA<0x16, 0x200, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.un\t$rD, $rA, $rB", []>;
+                    "fcmp.un\t$rD, $rA, $rB", [], IIC_FPU>;
   def FCMP_LT : MBA<0x16, 0x210, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.lt\t$rD, $rA, $rB", []>;
+                    "fcmp.lt\t$rD, $rA, $rB", [], IIC_FPU>;
   def FCMP_EQ : MBA<0x16, 0x220, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.eq\t$rD, $rA, $rB", []>;
+                    "fcmp.eq\t$rD, $rA, $rB", [], IIC_FPU>;
   def FCMP_LE : MBA<0x16, 0x230, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.le\t$rD, $rA, $rB", []>;
+                    "fcmp.le\t$rD, $rA, $rB", [], IIC_FPU>;
   def FCMP_GT : MBA<0x16, 0x240, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.gt\t$rD, $rA, $rB", []>;
+                    "fcmp.gt\t$rD, $rA, $rB", [], IIC_FPU>;
   def FCMP_NE : MBA<0x16, 0x250, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.ne\t$rD, $rA, $rB", []>;
+                    "fcmp.ne\t$rD, $rA, $rB", [], IIC_FPU>;
   def FCMP_GE : MBA<0x16, 0x260, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.ge\t$rD, $rA, $rB", []>;
+                    "fcmp.ge\t$rD, $rA, $rB", [], IIC_FPU>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -59,9 +59,9 @@ let Predicates = [HasHardFloatPred], hasSideEffects = 1 in {
 
 let Predicates = [HasFloatConvertPred], hasSideEffects = 1 in {
   def FLT   : MBA<0x16, 0x280, (outs GPR:$rD), (ins GPR:$rA),
-                  "flt\t$rD, $rA", []> { let rB = 0; }
+                  "flt\t$rD, $rA", [], IIC_FPU> { let rB = 0; }
   def FINT  : MBA<0x16, 0x300, (outs GPR:$rD), (ins GPR:$rA),
-                  "fint\t$rD, $rA", []> { let rB = 0; }
+                  "fint\t$rD, $rA", [], IIC_FPU> { let rB = 0; }
   def FSQRT : MBA<0x16, 0x380, (outs GPR:$rD), (ins GPR:$rA),
-                  "fsqrt\t$rD, $rA", []> { let rB = 0; }
+                  "fsqrt\t$rD, $rA", [], IIC_FPU> { let rB = 0; }
 }
