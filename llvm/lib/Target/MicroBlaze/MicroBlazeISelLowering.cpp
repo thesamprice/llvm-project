@@ -612,31 +612,57 @@ SDValue MicroBlazeTargetLowering::LowerFormalArguments(
     }
   }
 
-  // For vararg functions, spill any unused argument registers (R5-R10) to a
-  // contiguous register-save area on the stack immediately above the named
-  // arguments.  va_list is initialized to point at this area by LowerVASTART.
+  // For vararg functions, spill unused argument registers (R5-R10) to a
+  // register-save area inside the callee's own frame.  Following RISC-V
+  // convention (RISCVISelLowering.cpp), the save area sits at a NEGATIVE
+  // offset from the incoming SP so it does not overlap any variable in the
+  // caller's frame:
+  //
+  //   incoming SP  ──────────────────────────────────────────────────────
+  //                │  vararg register save area  │  NumFree × 4 bytes
+  //                │  (va_list points here)      │  at [incomingSP - N]
+  //   new SP  ─────┼─────────────────────────────┼──────────────────────
+  //                │  LR save, locals, ...       │
+  //
+  // If all argument registers were consumed by named args (NumFree == 0)
+  // the first vararg is already on the stack at CCInfo.getStackSize().
   if (IsVarArg) {
     static const MCPhysReg ArgRegs[] = {
         MicroBlaze::R5, MicroBlaze::R6, MicroBlaze::R7,
         MicroBlaze::R8, MicroBlaze::R9, MicroBlaze::R10};
     unsigned FirstFree = CCInfo.getFirstUnallocated(ArgRegs);
     unsigned NumFree   = std::size(ArgRegs) - FirstFree;
-    // Stack offset of the first free slot = end of the named argument area.
-    int64_t SaveOffset = CCInfo.getStackSize();
-    int VarFI = MFI.CreateFixedObject(NumFree * 4, SaveOffset, true);
-    FuncInfo->setVarArgsFrameIndex(VarFI);
+    int VarArgsSaveSize = NumFree * 4;
+    int64_t VaArgOffset;
+    int VarFI;
 
-    SDValue FIN = DAG.getFrameIndex(VarFI, MVT::i32);
-    for (unsigned i = 0; i < NumFree; ++i) {
-      Register VReg =
-          MRI.createVirtualRegister(&MicroBlaze::GPRRegClass);
-      MRI.addLiveIn(ArgRegs[FirstFree + i], VReg);
-      SDValue Val = DAG.getCopyFromReg(Chain, DL, VReg, MVT::i32);
-      SDValue Off = DAG.getConstant(i * 4, DL, MVT::i32);
-      SDValue Ptr = DAG.getNode(ISD::ADD, DL, MVT::i32, FIN, Off);
-      OutChains.push_back(
-          DAG.getStore(Chain, DL, Val, Ptr, MachinePointerInfo()));
+    if (VarArgsSaveSize == 0) {
+      // All register args consumed by named parameters; first vararg is on
+      // the stack.  Create a dummy 4-byte fixed object so VarArgsFrameIndex
+      // is valid.
+      VaArgOffset = CCInfo.getStackSize();
+      VarFI = MFI.CreateFixedObject(4, VaArgOffset, true);
+    } else {
+      // Negative offset: save area lives at the TOP of the callee's frame,
+      // just below the incoming SP, not in the caller's address space.
+      VaArgOffset = -(int64_t)VarArgsSaveSize;
+      VarFI = MFI.CreateFixedObject(VarArgsSaveSize, VaArgOffset, true);
+
+      SDValue FIN = DAG.getFrameIndex(VarFI, MVT::i32);
+      for (unsigned i = 0; i < NumFree; ++i) {
+        Register VReg =
+            MRI.createVirtualRegister(&MicroBlaze::GPRRegClass);
+        MRI.addLiveIn(ArgRegs[FirstFree + i], VReg);
+        SDValue Val = DAG.getCopyFromReg(Chain, DL, VReg, MVT::i32);
+        SDValue Off = DAG.getConstant(i * 4, DL, MVT::i32);
+        SDValue Ptr = DAG.getNode(ISD::ADD, DL, MVT::i32, FIN, Off);
+        OutChains.push_back(
+            DAG.getStore(Chain, DL, Val, Ptr, MachinePointerInfo()));
+      }
     }
+
+    FuncInfo->setVarArgsFrameIndex(VarFI);
+    FuncInfo->setVarArgsSaveSize(VarArgsSaveSize);
   }
 
   if (!OutChains.empty())
@@ -714,6 +740,10 @@ SDValue MicroBlazeTargetLowering::LowerCall(
   SDValue Callee        = CLI.Callee;
   CallingConv::ID CallConv = CLI.CallConv;
   bool IsVarArg         = CLI.IsVarArg;
+
+  // MicroBlaze does not implement tail-call optimization.  Tell the caller
+  // so that the subsequent ret instruction is lowered to RTSD normally.
+  CLI.IsTailCall = false;
 
   MachineFunction &MF = DAG.getMachineFunction();
 

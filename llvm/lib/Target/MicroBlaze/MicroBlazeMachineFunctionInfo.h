@@ -22,6 +22,8 @@ class MicroBlazeMachineFunctionInfo : public MachineFunctionInfo {
   unsigned OutArgRegSize = 0;
   // Frame index of the vararg register save area (valid only in vararg functions).
   int VarArgsFrameIndex = 0;
+  // Number of bytes saved for incoming register varargs (0 if none).
+  int VarArgsSaveSize = 0;
 
 public:
   MicroBlazeMachineFunctionInfo() = default;
@@ -46,6 +48,9 @@ public:
 
   int getVarArgsFrameIndex() const { return VarArgsFrameIndex; }
   void setVarArgsFrameIndex(int I) { VarArgsFrameIndex = I; }
+
+  int getVarArgsSaveSize() const { return VarArgsSaveSize; }
+  void setVarArgsSaveSize(int S) { VarArgsSaveSize = S; }
 };
 
 } // namespace llvm
