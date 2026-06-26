@@ -118,12 +118,142 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i8,  Expand);
   setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16, Expand);
 
-  // No floating-point without hard-float feature.
+  // Without hard-float, all floating-point operations are done via libcalls.
+  // Expand both f32 and f64 operations; the legalizer emits calls to the
+  // compiler-rt soft-float routines registered below.
   if (!STI.hasHardFloat()) {
-    setOperationAction(ISD::FADD, MVT::f32, Expand);
-    setOperationAction(ISD::FSUB, MVT::f32, Expand);
-    setOperationAction(ISD::FMUL, MVT::f32, Expand);
-    setOperationAction(ISD::FDIV, MVT::f32, Expand);
+    for (MVT FT : {MVT::f32, MVT::f64}) {
+      setOperationAction(ISD::FADD,      FT, Expand);
+      setOperationAction(ISD::FSUB,      FT, Expand);
+      setOperationAction(ISD::FMUL,      FT, Expand);
+      setOperationAction(ISD::FDIV,      FT, Expand);
+      setOperationAction(ISD::FREM,      FT, Expand);
+      setOperationAction(ISD::FMA,       FT, Expand);
+      setOperationAction(ISD::FNEG,      FT, Expand);
+      setOperationAction(ISD::FABS,      FT, Expand);
+      setOperationAction(ISD::FSQRT,     FT, Expand);
+      setOperationAction(ISD::FSIN,      FT, Expand);
+      setOperationAction(ISD::FCOS,      FT, Expand);
+      setOperationAction(ISD::FPOW,      FT, Expand);
+      setOperationAction(ISD::FLOG,      FT, Expand);
+      setOperationAction(ISD::FLOG2,     FT, Expand);
+      setOperationAction(ISD::FLOG10,    FT, Expand);
+      setOperationAction(ISD::FEXP,      FT, Expand);
+      setOperationAction(ISD::FEXP2,     FT, Expand);
+      setOperationAction(ISD::FRINT,     FT, Expand);
+      setOperationAction(ISD::FNEARBYINT,FT, Expand);
+      setOperationAction(ISD::FCEIL,     FT, Expand);
+      setOperationAction(ISD::FFLOOR,    FT, Expand);
+      setOperationAction(ISD::FTRUNC,    FT, Expand);
+      setOperationAction(ISD::FROUND,    FT, Expand);
+      setOperationAction(ISD::FMINNUM,   FT, Expand);
+      setOperationAction(ISD::FMAXNUM,   FT, Expand);
+      setOperationAction(ISD::FCOPYSIGN, FT, Expand);
+      setOperationAction(ISD::FLDEXP,    FT, Expand);
+    }
+    setOperationAction(ISD::FP_TO_SINT, MVT::i32, Expand);
+    setOperationAction(ISD::FP_TO_SINT, MVT::i64, Expand);
+    setOperationAction(ISD::FP_TO_UINT, MVT::i32, Expand);
+    setOperationAction(ISD::FP_TO_UINT, MVT::i64, Expand);
+    setOperationAction(ISD::SINT_TO_FP, MVT::i32, Expand);
+    setOperationAction(ISD::SINT_TO_FP, MVT::i64, Expand);
+    setOperationAction(ISD::UINT_TO_FP, MVT::i32, Expand);
+    setOperationAction(ISD::UINT_TO_FP, MVT::i64, Expand);
+    setOperationAction(ISD::FP_EXTEND,  MVT::f64, Expand);
+    setOperationAction(ISD::FP_ROUND,   MVT::f32, Expand);
+
+    // Standard compiler-rt soft-float ABI (same names as GCC libgcc).
+    // f32 arithmetic
+    setLibcallImpl(RTLIB::ADD_F32, RTLIB::impl___addsf3);
+    setLibcallImpl(RTLIB::SUB_F32, RTLIB::impl___subsf3);
+    setLibcallImpl(RTLIB::MUL_F32, RTLIB::impl___mulsf3);
+    setLibcallImpl(RTLIB::DIV_F32, RTLIB::impl___divsf3);
+    // f64 arithmetic
+    setLibcallImpl(RTLIB::ADD_F64, RTLIB::impl___adddf3);
+    setLibcallImpl(RTLIB::SUB_F64, RTLIB::impl___subdf3);
+    setLibcallImpl(RTLIB::MUL_F64, RTLIB::impl___muldf3);
+    setLibcallImpl(RTLIB::DIV_F64, RTLIB::impl___divdf3);
+    // f32 ↔ f64
+    setLibcallImpl(RTLIB::FPEXT_F32_F64,  RTLIB::impl___extendsfdf2);
+    setLibcallImpl(RTLIB::FPROUND_F64_F32, RTLIB::impl___truncdfsf2);
+    // f32 → integer
+    setLibcallImpl(RTLIB::FPTOSINT_F32_I32, RTLIB::impl___fixsfsi);
+    setLibcallImpl(RTLIB::FPTOSINT_F32_I64, RTLIB::impl___fixsfdi);
+    setLibcallImpl(RTLIB::FPTOUINT_F32_I32, RTLIB::impl___fixunssfsi);
+    setLibcallImpl(RTLIB::FPTOUINT_F32_I64, RTLIB::impl___fixunssfdi);
+    // f64 → integer
+    setLibcallImpl(RTLIB::FPTOSINT_F64_I32, RTLIB::impl___fixdfsi);
+    setLibcallImpl(RTLIB::FPTOSINT_F64_I64, RTLIB::impl___fixdfdi);
+    setLibcallImpl(RTLIB::FPTOUINT_F64_I32, RTLIB::impl___fixunsdfsi);
+    setLibcallImpl(RTLIB::FPTOUINT_F64_I64, RTLIB::impl___fixunsdfdi);
+    // integer → f32
+    setLibcallImpl(RTLIB::SINTTOFP_I32_F32, RTLIB::impl___floatsisf);
+    setLibcallImpl(RTLIB::SINTTOFP_I64_F32, RTLIB::impl___floatdisf);
+    setLibcallImpl(RTLIB::UINTTOFP_I32_F32, RTLIB::impl___floatunsisf);
+    setLibcallImpl(RTLIB::UINTTOFP_I64_F32, RTLIB::impl___floatundisf);
+    // integer → f64
+    setLibcallImpl(RTLIB::SINTTOFP_I32_F64, RTLIB::impl___floatsidf);
+    setLibcallImpl(RTLIB::SINTTOFP_I64_F64, RTLIB::impl___floatdidf);
+    setLibcallImpl(RTLIB::UINTTOFP_I32_F64, RTLIB::impl___floatunsidf);
+    setLibcallImpl(RTLIB::UINTTOFP_I64_F64, RTLIB::impl___floatundidf);
+    // f32 comparisons
+    setLibcallImpl(RTLIB::OEQ_F32,  RTLIB::impl___eqsf2);
+    setLibcallImpl(RTLIB::UNE_F32,  RTLIB::impl___nesf2);
+    setLibcallImpl(RTLIB::OLT_F32,  RTLIB::impl___ltsf2);
+    setLibcallImpl(RTLIB::OLE_F32,  RTLIB::impl___lesf2);
+    setLibcallImpl(RTLIB::OGT_F32,  RTLIB::impl___gtsf2);
+    setLibcallImpl(RTLIB::OGE_F32,  RTLIB::impl___gesf2);
+    setLibcallImpl(RTLIB::UO_F32,   RTLIB::impl___unordsf2);
+    // f64 comparisons
+    setLibcallImpl(RTLIB::OEQ_F64,  RTLIB::impl___eqdf2);
+    setLibcallImpl(RTLIB::UNE_F64,  RTLIB::impl___nedf2);
+    setLibcallImpl(RTLIB::OLT_F64,  RTLIB::impl___ltdf2);
+    setLibcallImpl(RTLIB::OLE_F64,  RTLIB::impl___ledf2);
+    setLibcallImpl(RTLIB::OGT_F64,  RTLIB::impl___gtdf2);
+    setLibcallImpl(RTLIB::OGE_F64,  RTLIB::impl___gedf2);
+    setLibcallImpl(RTLIB::UO_F64,   RTLIB::impl___unorddf2);
+    // f32 math libcalls (C99 single-precision variants)
+    setLibcallImpl(RTLIB::FLOOR_F32,     RTLIB::impl_floorf);
+    setLibcallImpl(RTLIB::CEIL_F32,      RTLIB::impl_ceilf);
+    setLibcallImpl(RTLIB::ROUND_F32,     RTLIB::impl_roundf);
+    setLibcallImpl(RTLIB::TRUNC_F32,     RTLIB::impl_truncf);
+    setLibcallImpl(RTLIB::RINT_F32,      RTLIB::impl_rintf);
+    setLibcallImpl(RTLIB::NEARBYINT_F32, RTLIB::impl_nearbyintf);
+    setLibcallImpl(RTLIB::SQRT_F32,      RTLIB::impl_sqrtf);
+    setLibcallImpl(RTLIB::SIN_F32,       RTLIB::impl_sinf);
+    setLibcallImpl(RTLIB::COS_F32,       RTLIB::impl_cosf);
+    setLibcallImpl(RTLIB::POW_F32,       RTLIB::impl_powf);
+    setLibcallImpl(RTLIB::EXP_F32,       RTLIB::impl_expf);
+    setLibcallImpl(RTLIB::EXP2_F32,      RTLIB::impl_exp2f);
+    setLibcallImpl(RTLIB::LOG_F32,       RTLIB::impl_logf);
+    setLibcallImpl(RTLIB::LOG2_F32,      RTLIB::impl_log2f);
+    setLibcallImpl(RTLIB::LOG10_F32,     RTLIB::impl_log10f);
+    setLibcallImpl(RTLIB::REM_F32,       RTLIB::impl_fmodf);
+    setLibcallImpl(RTLIB::COPYSIGN_F32,  RTLIB::impl_copysignf);
+    setLibcallImpl(RTLIB::FMIN_F32,      RTLIB::impl_fminf);
+    setLibcallImpl(RTLIB::FMAX_F32,      RTLIB::impl_fmaxf);
+    setLibcallImpl(RTLIB::LDEXP_F32,     RTLIB::impl_ldexpf);
+    // f64 math libcalls (C99 double-precision)
+    setLibcallImpl(RTLIB::FLOOR_F64,     RTLIB::impl_floor);
+    setLibcallImpl(RTLIB::CEIL_F64,      RTLIB::impl_ceil);
+    setLibcallImpl(RTLIB::ROUND_F64,     RTLIB::impl_round);
+    setLibcallImpl(RTLIB::TRUNC_F64,     RTLIB::impl_trunc);
+    setLibcallImpl(RTLIB::RINT_F64,      RTLIB::impl_rint);
+    setLibcallImpl(RTLIB::NEARBYINT_F64, RTLIB::impl_nearbyint);
+    setLibcallImpl(RTLIB::SQRT_F64,      RTLIB::impl_sqrt);
+    setLibcallImpl(RTLIB::SIN_F64,       RTLIB::impl_sin);
+    setLibcallImpl(RTLIB::COS_F64,       RTLIB::impl_cos);
+    setLibcallImpl(RTLIB::POW_F64,       RTLIB::impl_pow);
+    setLibcallImpl(RTLIB::EXP_F64,       RTLIB::impl_exp);
+    setLibcallImpl(RTLIB::EXP2_F64,      RTLIB::impl_exp2);
+    setLibcallImpl(RTLIB::LOG_F64,       RTLIB::impl_log);
+    setLibcallImpl(RTLIB::LOG2_F64,      RTLIB::impl_log2);
+    setLibcallImpl(RTLIB::LOG10_F64,     RTLIB::impl_log10);
+    setLibcallImpl(RTLIB::REM_F64,       RTLIB::impl_fmod);
+    setLibcallImpl(RTLIB::COPYSIGN_F64,  RTLIB::impl_copysign);
+    setLibcallImpl(RTLIB::FMIN_F64,      RTLIB::impl_fmin);
+    setLibcallImpl(RTLIB::FMAX_F64,      RTLIB::impl_fmax);
+    setLibcallImpl(RTLIB::LDEXP_F64,     RTLIB::impl_ldexp);
   }
 
   // Lower global addresses and external symbols via our wrapper node.
@@ -145,6 +275,24 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   setOperationAction(ISD::CTLZ,  MVT::i32, Expand);
   setOperationAction(ISD::CTTZ,  MVT::i32, Expand);
   setOperationAction(ISD::CTPOP, MVT::i32, Expand);
+
+  // No byte-swap, bit-reverse, or rotate instructions.
+  setOperationAction(ISD::BSWAP,     MVT::i32, Expand);
+  setOperationAction(ISD::ROTL,      MVT::i32, Expand);
+  setOperationAction(ISD::ROTR,      MVT::i32, Expand);
+  setOperationAction(ISD::BITREVERSE, MVT::i32, Expand);
+
+  // 64-bit shifts decomposed into 32-bit pairs.
+  setOperationAction(ISD::SHL_PARTS, MVT::i32, Expand);
+  setOperationAction(ISD::SRL_PARTS, MVT::i32, Expand);
+  setOperationAction(ISD::SRA_PARTS, MVT::i32, Expand);
+
+  // Varargs: VASTART and VAARG are custom-lowered. VACOPY and VAEND are trivial
+  // for a pointer-only va_list and can be Expanded (VACOPY → store, VAEND → no-op).
+  setOperationAction(ISD::VASTART, MVT::Other, Custom);
+  setOperationAction(ISD::VAARG,   MVT::Other, Custom);
+  setOperationAction(ISD::VACOPY,  MVT::Other, Expand);
+  setOperationAction(ISD::VAEND,   MVT::Other, Expand);
 
   // No jump-table support: fall back to decision trees for all switch stmts.
   setMinimumJumpTableEntries(INT_MAX);
@@ -182,6 +330,8 @@ SDValue MicroBlazeTargetLowering::LowerOperation(SDValue Op,
   case ISD::SHL:
   case ISD::SRL:
   case ISD::SRA:            return LowerShift(Op, DAG);
+  case ISD::VASTART:        return LowerVASTART(Op, DAG);
+  case ISD::VAARG:          return LowerVAARG(Op, DAG);
   default:
     llvm_unreachable("Unexpected custom lowering");
   }
@@ -434,10 +584,14 @@ SDValue MicroBlazeTargetLowering::LowerFormalArguments(
   MachineFunction &MF = DAG.getMachineFunction();
   MachineFrameInfo &MFI = MF.getFrameInfo();
   MachineRegisterInfo &MRI = MF.getRegInfo();
+  MicroBlazeMachineFunctionInfo *FuncInfo =
+      MF.getInfo<MicroBlazeMachineFunctionInfo>();
 
   SmallVector<CCValAssign, 16> ArgLocs;
   CCState CCInfo(CallConv, IsVarArg, MF, ArgLocs, *DAG.getContext());
   CCInfo.AnalyzeFormalArguments(Ins, CC_MicroBlaze);
+
+  SmallVector<SDValue, 4> OutChains;
 
   for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
     CCValAssign &VA = ArgLocs[i];
@@ -458,7 +612,89 @@ SDValue MicroBlazeTargetLowering::LowerFormalArguments(
     }
   }
 
+  // For vararg functions, spill any unused argument registers (R5-R10) to a
+  // contiguous register-save area on the stack immediately above the named
+  // arguments.  va_list is initialized to point at this area by LowerVASTART.
+  if (IsVarArg) {
+    static const MCPhysReg ArgRegs[] = {
+        MicroBlaze::R5, MicroBlaze::R6, MicroBlaze::R7,
+        MicroBlaze::R8, MicroBlaze::R9, MicroBlaze::R10};
+    unsigned FirstFree = CCInfo.getFirstUnallocated(ArgRegs);
+    unsigned NumFree   = std::size(ArgRegs) - FirstFree;
+    // Stack offset of the first free slot = end of the named argument area.
+    int64_t SaveOffset = CCInfo.getStackSize();
+    int VarFI = MFI.CreateFixedObject(NumFree * 4, SaveOffset, true);
+    FuncInfo->setVarArgsFrameIndex(VarFI);
+
+    SDValue FIN = DAG.getFrameIndex(VarFI, MVT::i32);
+    for (unsigned i = 0; i < NumFree; ++i) {
+      Register VReg =
+          MRI.createVirtualRegister(&MicroBlaze::GPRRegClass);
+      MRI.addLiveIn(ArgRegs[FirstFree + i], VReg);
+      SDValue Val = DAG.getCopyFromReg(Chain, DL, VReg, MVT::i32);
+      SDValue Off = DAG.getConstant(i * 4, DL, MVT::i32);
+      SDValue Ptr = DAG.getNode(ISD::ADD, DL, MVT::i32, FIN, Off);
+      OutChains.push_back(
+          DAG.getStore(Chain, DL, Val, Ptr, MachinePointerInfo()));
+    }
+  }
+
+  if (!OutChains.empty())
+    Chain = DAG.getNode(ISD::TokenFactor, DL, MVT::Other, OutChains);
   return Chain;
+}
+
+//===----------------------------------------------------------------------===//
+// Vararg lowering
+//===----------------------------------------------------------------------===//
+
+SDValue MicroBlazeTargetLowering::LowerVASTART(SDValue Op,
+                                                SelectionDAG &DAG) const {
+  MachineFunction &MF = DAG.getMachineFunction();
+  MicroBlazeMachineFunctionInfo *FuncInfo =
+      MF.getInfo<MicroBlazeMachineFunctionInfo>();
+  SDLoc DL(Op);
+  // va_start stores the address of the first vararg (the register save area).
+  SDValue FIN =
+      DAG.getFrameIndex(FuncInfo->getVarArgsFrameIndex(), MVT::i32);
+  const Value *SV = cast<SrcValueSDNode>(Op.getOperand(2))->getValue();
+  return DAG.getStore(Op.getOperand(0), DL, FIN, Op.getOperand(1),
+                      MachinePointerInfo(SV));
+}
+
+SDValue MicroBlazeTargetLowering::LowerVAARG(SDValue Op,
+                                               SelectionDAG &DAG) const {
+  SDNode *Node = Op.getNode();
+  EVT VT = Node->getValueType(0);
+  SDValue InChain = Node->getOperand(0);
+  SDValue VAListPtr = Node->getOperand(1);
+  const Value *SV = cast<SrcValueSDNode>(Node->getOperand(2))->getValue();
+  SDLoc DL(Node);
+
+  // va_list is a char* pointing at the next argument slot.
+  SDValue VAList = DAG.getLoad(MVT::i32, DL, InChain, VAListPtr,
+                                MachinePointerInfo(SV));
+  SDValue LoadChain = VAList.getValue(1);
+
+  // Load the argument value from *ap.
+  SDValue Result =
+      DAG.getExtLoad(ISD::EXTLOAD, DL, MVT::i32, LoadChain, VAList,
+                     MachinePointerInfo(), VT);
+  SDValue ResultChain = Result.getValue(1);
+
+  // Advance ap by sizeof(type) rounded up to a 4-byte boundary (UG984 ABI).
+  unsigned Bytes = ((VT.getSizeInBits() + 7) / 8 + 3) & ~3u;
+  SDValue NextPtr =
+      DAG.getNode(ISD::ADD, DL, MVT::i32, VAList,
+                  DAG.getConstant(Bytes, DL, MVT::i32));
+  SDValue StoreChain =
+      DAG.getStore(ResultChain, DL, NextPtr, VAListPtr, MachinePointerInfo(SV));
+
+  // Truncate back to the actual requested type if needed.
+  if (VT != MVT::i32)
+    Result = DAG.getNode(ISD::TRUNCATE, DL, VT, Result);
+
+  return DAG.getMergeValues({Result, StoreChain}, DL);
 }
 
 //===----------------------------------------------------------------------===//
@@ -601,4 +837,20 @@ SDValue MicroBlazeTargetLowering::LowerReturn(
     RetOps.push_back(Flag);
 
   return DAG.getNode(MicroBlazeISD::RET_FLAG, DL, MVT::Other, RetOps);
+}
+
+//===----------------------------------------------------------------------===//
+// Inline assembly constraints
+//===----------------------------------------------------------------------===//
+
+std::pair<unsigned, const TargetRegisterClass *>
+MicroBlazeTargetLowering::getRegForInlineAsmConstraint(
+    const TargetRegisterInfo *TRI, StringRef Constraint, MVT VT) const {
+  if (Constraint.size() == 1) {
+    switch (Constraint[0]) {
+    case 'r':
+      return {0U, &MicroBlaze::GPRRegClass};
+    }
+  }
+  return TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
 }

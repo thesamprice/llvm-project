@@ -20,6 +20,8 @@ class MicroBlazeMachineFunctionInfo : public MachineFunctionInfo {
   int LRSpillSlot = -1;
   // Size of the outgoing argument area reserved in the stack frame.
   unsigned OutArgRegSize = 0;
+  // Frame index of the vararg register save area (valid only in vararg functions).
+  int VarArgsFrameIndex = 0;
 
 public:
   MicroBlazeMachineFunctionInfo() = default;
@@ -41,6 +43,9 @@ public:
 
   unsigned getOutArgRegSize() const { return OutArgRegSize; }
   void setOutArgRegSize(unsigned S) { OutArgRegSize = S; }
+
+  int getVarArgsFrameIndex() const { return VarArgsFrameIndex; }
+  void setVarArgsFrameIndex(int I) { VarArgsFrameIndex = I; }
 };
 
 } // namespace llvm
