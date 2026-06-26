@@ -19,6 +19,7 @@ enum NodeType : unsigned {
   RET_FLAG, // Return; operands are chain, glue, and optional return-value regs.
   CALL,     // Direct or indirect call; operand 0 = chain, 1 = callee, rest = args.
   Wrapper,  // Wraps a global/extern symbol for ADDIK-based address materialisation.
+  GOT_LOAD, // PIC GOT-indirect load: lwi rD, r20, sym@got (R_MICROBLAZE_GOT_64).
   // Conditional branch after compare-to-zero:
   //   (chain, cond_as_ISD_CondCode_const, diff_reg, dest_bb)
   // diff_reg = LHS - RHS already computed; branch based on sign/zero of diff.

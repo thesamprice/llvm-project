@@ -8,6 +8,7 @@
 
 #include "MicroBlazeISelLowering.h"
 #include "MCTargetDesc/MicroBlazeMCTargetDesc.h"
+#include "MicroBlazeBaseInfo.h"
 #include "MicroBlazeInstrInfo.h"
 #include "MicroBlazeMachineFunctionInfo.h"
 #include "MicroBlazeSubtarget.h"
@@ -306,6 +307,7 @@ const char *MicroBlazeTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case MicroBlazeISD::RET_FLAG:     return "MicroBlazeISD::RET_FLAG";
   case MicroBlazeISD::CALL:         return "MicroBlazeISD::CALL";
   case MicroBlazeISD::Wrapper:      return "MicroBlazeISD::Wrapper";
+  case MicroBlazeISD::GOT_LOAD:    return "MicroBlazeISD::GOT_LOAD";
   case MicroBlazeISD::BR_CC:         return "MicroBlazeISD::BR_CC";
   case MicroBlazeISD::SELECT_CC:     return "MicroBlazeISD::SELECT_CC";
   case MicroBlazeISD::BR_CC_CMP:     return "MicroBlazeISD::BR_CC_CMP";
@@ -557,6 +559,18 @@ SDValue MicroBlazeTargetLowering::LowerGlobalAddress(SDValue Op,
                                                       SelectionDAG &DAG) const {
   SDLoc DL(Op);
   auto *GAN = cast<GlobalAddressSDNode>(Op);
+
+  if (isPositionIndependent()) {
+    // PIC: load the symbol's address from the GOT via R20.
+    // Emits: imm HI16; lwi rD, r20, LO16  with R_MICROBLAZE_GOT_64.
+    SDValue GOTSym = DAG.getTargetGlobalAddress(GAN->getGlobal(), DL, MVT::i32,
+                                                 GAN->getOffset(),
+                                                 MicroBlazeII::MO_GOT);
+    return DAG.getNode(MicroBlazeISD::GOT_LOAD, DL,
+                       DAG.getVTList(MVT::i32, MVT::Other),
+                       DAG.getEntryNode(), GOTSym).getValue(0);
+  }
+
   SDValue GAWrapper =
       DAG.getTargetGlobalAddress(GAN->getGlobal(), DL, MVT::i32,
                                  GAN->getOffset());
@@ -568,6 +582,15 @@ MicroBlazeTargetLowering::LowerExternalSymbol(SDValue Op,
                                                SelectionDAG &DAG) const {
   SDLoc DL(Op);
   const char *Sym = cast<ExternalSymbolSDNode>(Op)->getSymbol();
+
+  if (isPositionIndependent()) {
+    SDValue GOTSym = DAG.getTargetExternalSymbol(Sym, MVT::i32,
+                                                  MicroBlazeII::MO_GOT);
+    return DAG.getNode(MicroBlazeISD::GOT_LOAD, DL,
+                       DAG.getVTList(MVT::i32, MVT::Other),
+                       DAG.getEntryNode(), GOTSym).getValue(0);
+  }
+
   SDValue ESWrapper = DAG.getTargetExternalSymbol(Sym, MVT::i32);
   return DAG.getNode(MicroBlazeISD::Wrapper, DL, MVT::i32, ESWrapper);
 }

@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "MicroBlazeMCInstLower.h"
+#include "MicroBlazeBaseInfo.h"
+#include "llvm/BinaryFormat/ELF.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineOperand.h"
@@ -88,5 +90,13 @@ MicroBlazeMCInstLower::LowerSymbolOperand(const MachineOperand &MO) const {
   if (MO.getOffset())
     Expr = MCBinaryExpr::createAdd(
         Expr, MCConstantExpr::create(MO.getOffset(), Ctx), Ctx);
+
+  // Wrap with a target specifier for PIC relocations.
+  unsigned TF = MO.getTargetFlags();
+  if (TF == MicroBlazeII::MO_GOT)
+    Expr = MCSpecifierExpr::create(Expr, ELF::R_MICROBLAZE_GOT_64, Ctx);
+  else if (TF == MicroBlazeII::MO_PLT)
+    Expr = MCSpecifierExpr::create(Expr, ELF::R_MICROBLAZE_PLT_64, Ctx);
+
   return MCOperand::createExpr(Expr);
 }

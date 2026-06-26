@@ -54,6 +54,13 @@ public:
 MicroBlaze::MicroBlaze(Ctx &ctx) : TargetInfo(ctx) {
   // NOP = or r0, r0, r0 = 0x80000000.  In LE byte order: 00 00 00 80.
   trapInstr = {0x00, 0x00, 0x00, 0x80};
+  // GOT entries are 4-byte pointers.
+  gotEntrySize = 4;
+  // Dynamic reloc types needed by the generic GOT/PLT infrastructure.
+  relativeRel = R_MICROBLAZE_REL;
+  gotRel      = R_MICROBLAZE_GLOB_DAT;
+  pltRel      = R_MICROBLAZE_JUMP_SLOT;
+  copyRel     = R_MICROBLAZE_COPY;
 }
 
 RelExpr MicroBlaze::getRelExpr(RelType type, const Symbol &s,
@@ -68,6 +75,12 @@ RelExpr MicroBlaze::getRelExpr(RelType type, const Symbol &s,
   case R_MICROBLAZE_64_PCREL:
   case R_MICROBLAZE_32_PCREL:
     return R_PC;
+  case R_MICROBLAZE_GOT_64:
+    return R_GOT;
+  case R_MICROBLAZE_PLT_64:
+    return R_PLT_PC;
+  case R_MICROBLAZE_GOTPC_64:
+    return R_GOTONLY_PC;
   default:
     return R_ABS;
   }
@@ -108,6 +121,42 @@ void MicroBlaze::relocate(uint8_t *loc, const Relocation &rel,
     write16le(loc + 4, offset & 0xFFFF);
     break;
   }
+
+  case R_MICROBLAZE_GOT_64: {
+    // IMM+LWI pair (GOT-relative).
+    // val = address of GOT entry - GOT base (R20).
+    // Patch: IMM bits[15:0] = HI16(val), LWI bits[15:0] = LO16(val).
+    write16le(loc,     (val >> 16) & 0xFFFF);
+    write16le(loc + 4, val & 0xFFFF);
+    break;
+  }
+
+  case R_MICROBLAZE_PLT_64: {
+    // IMM+branch pair (PLT, PC-relative from IMM instruction address).
+    // Same adjustment as 64_PCREL: branch PC = IMM+4.
+    int64_t offset = static_cast<int64_t>(val) - 4;
+    write16le(loc,     (offset >> 16) & 0xFFFF);
+    write16le(loc + 4, offset & 0xFFFF);
+    break;
+  }
+
+  case R_MICROBLAZE_GOTPC_64: {
+    // IMM+ADDIK pair (PC-relative GOT pointer setup).
+    // val = GOT_base - (IMM_address + 4).
+    int64_t offset = static_cast<int64_t>(val) - 4;
+    write16le(loc,     (offset >> 16) & 0xFFFF);
+    write16le(loc + 4, offset & 0xFFFF);
+    break;
+  }
+
+  case R_MICROBLAZE_GLOB_DAT:
+  case R_MICROBLAZE_JUMP_SLOT:
+    write32le(loc, val);
+    break;
+
+  case R_MICROBLAZE_REL:
+    write32le(loc, val);
+    break;
 
   default:
     Err(ctx) << getErrorLoc(ctx, loc) << "unrecognized relocation "
