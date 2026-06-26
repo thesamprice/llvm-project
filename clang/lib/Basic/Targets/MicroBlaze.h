@@ -31,6 +31,9 @@ public:
     SizeType = UnsignedInt;
     PtrDiffType = SignedInt;
     IntPtrType = SignedInt;
+    // GCC MicroBlaze ABI aligns int64_t / double to 4 bytes, not 8.
+    LongLongAlign = 32;
+    DoubleAlign = 32;
   }
 
   void getTargetDefines(const LangOptions &Opts,
