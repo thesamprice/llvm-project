@@ -968,6 +968,12 @@ set(ve_SOURCES
 
 set(m68k_SOURCES ${GENERIC_SOURCES})
 
+set(microblaze_SOURCES
+  microblaze/shift.c
+  ${GENERIC_SOURCES}
+)
+set(microblazeel_SOURCES ${microblaze_SOURCES})
+
 add_custom_target(builtins)
 set_target_properties(builtins PROPERTIES FOLDER "Compiler-RT/Metatargets")
 
