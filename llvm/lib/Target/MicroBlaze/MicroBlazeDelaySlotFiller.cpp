@@ -15,8 +15,17 @@
 // instruction that defines a register the branch reads (conservative rule that
 // avoids first-iteration undefined-register bugs on backedges).
 //
-// The filler scans backward from each delay-slot branch within the same basic
-// block for the first instruction that is safe to hoist.  If none is found:
+// The filler uses two strategies, tried in order:
+//
+//   1. Backward search — scan backward within the current basic block for an
+//      instruction that is safe to hoist.  If found, splice it into the slot.
+//
+//   2. Successor BB search — if backward search fails for a terminator, pick
+//      the hottest successor block and try to hoist its first instruction into
+//      all predecessor delay slots simultaneously, cloning as needed.  This
+//      mirrors the approach used by the MIPS delay slot filler.
+//
+// If neither strategy succeeds:
 //
 //   - For conditional/unconditional branches: switch to the equivalent no-delay
 //     opcode (e.g. BNEID → BNEI).  Semantics are identical; the no-delay form
@@ -31,7 +40,12 @@
 #include "MicroBlaze.h"
 #include "MicroBlazeInstrInfo.h"
 #include "MicroBlazeSubtarget.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/Statistic.h"
+#include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
@@ -44,21 +58,75 @@ using namespace llvm;
 
 #define DEBUG_TYPE "microblaze-delay-slot-filler"
 
+STATISTIC(FilledSlots, "Number of delay slots filled");
+STATISTIC(UsefulSlots, "Number of delay slots filled with non-NOP instructions");
+
 namespace {
 
-struct MicroBlazeDelaySlotFiller : public MachineFunctionPass {
+// Maps each predecessor block to the branch instruction whose delay slot will
+// receive the cloned filler, or nullptr if the predecessor falls straight
+// through (no branch) and the clone should be appended to its end.
+using BB2BrMap = SmallDenseMap<MachineBasicBlock *, MachineInstr *, 2>;
+
+class MicroBlazeDelaySlotFiller : public MachineFunctionPass {
+  // Branches whose delay slots have already been resolved during this pass.
+  // Used by examinePred to detect predecessors that can no longer accept a
+  // clone (their slot was filled, NOPed, or converted to a no-delay opcode).
+  mutable SmallPtrSet<const MachineInstr *, 8> FilledBranches;
+
+public:
   static char ID;
 
   MicroBlazeDelaySlotFiller() : MachineFunctionPass(ID) {}
 
-  bool runOnMachineFunction(MachineFunction &MF) override;
-
   StringRef getPassName() const override {
     return "MicroBlaze delay slot filler";
   }
+
+  MachineFunctionProperties getRequiredProperties() const override {
+    return MachineFunctionProperties().setNoVRegs();
+  }
+
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
+    AU.addRequired<MachineBranchProbabilityInfoWrapperPass>();
+    MachineFunctionPass::getAnalysisUsage(AU);
+  }
+
+  bool runOnMachineFunction(MachineFunction &MF) override;
+
+private:
+  /// Search backward within MBB from BranchIt for an instruction safe to hoist
+  /// into the delay slot.  On success, splices it in and returns true.
+  bool searchBackward(MachineBasicBlock &MBB,
+                      MachineBasicBlock::iterator BranchIt,
+                      const TargetInstrInfo *TII) const;
+
+  /// Search the hottest successor of MBB for an instruction that can be cloned
+  /// into the delay slots of all predecessors of that successor.  Mirrors
+  /// MipsDelaySlotFiller::searchSuccBBs.
+  bool searchSuccBBs(MachineBasicBlock &MBB,
+                     MachineBasicBlock::iterator Slot,
+                     const TargetInstrInfo *TII) const;
+
+  /// Pick the highest-probability non-EH-pad successor of MBB, or nullptr.
+  MachineBasicBlock *selectSuccBB(MachineBasicBlock &MBB) const;
+
+  /// Examine predecessor Pred of Succ.  Records whether Pred has an unoccupied
+  /// delay slot that branches to Succ (or falls through), accumulates banned
+  /// register defs from other successor live-ins, and adds to BrMap.
+  /// Returns false if Pred cannot accept a clone.
+  bool examinePred(MachineBasicBlock &Pred, const MachineBasicBlock &Succ,
+                   SmallSet<MCPhysReg, 8> &BannedDefs, bool &HasMultipleSuccs,
+                   BB2BrMap &BrMap) const;
 };
 
 } // namespace
+
+char MicroBlazeDelaySlotFiller::ID = 0;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 // Return the no-delay equivalent opcode for a delayed branch, or 0 if none
 // exists.  Calls (BRALID, BRALD, BRLID, BRLD) and returns (RTSD, RTID, RTBD,
@@ -105,7 +173,6 @@ static void collectRegs(const MachineInstr &MI,
   }
 }
 
-// Return true if Sets A and B share any element.
 static bool overlaps(const SmallSet<MCPhysReg, 8> &A,
                      const SmallSet<MCPhysReg, 8> &B) {
   for (MCPhysReg R : A)
@@ -114,89 +181,41 @@ static bool overlaps(const SmallSet<MCPhysReg, 8> &A,
   return false;
 }
 
-// Try to find an instruction earlier in MBB that can be legally moved into the
-// delay slot immediately after BranchIt.  If found, splice it there and return
-// true.  Otherwise return false.
-static bool tryFillSlot(MachineBasicBlock &MBB,
-                        MachineBasicBlock::iterator BranchIt,
-                        const TargetInstrInfo *TII) {
-  // Registers explicitly defined by the branch (e.g. R15 for brald/bralid).
-  // A hoisted instruction must not write these — it would clobber the branch's
-  // output (the saved return address for calls).
-  SmallSet<MCPhysReg, 8> BranchDefs, BranchUses;
-  collectRegs(*BranchIt, BranchDefs, BranchUses);
-
-  // Hazard sets that grow as we walk backward past each instruction between the
-  // current candidate and the branch.
-  SmallSet<MCPhysReg, 8> DefsAfter; // regs written by instructions after cand
-  SmallSet<MCPhysReg, 8> UsesAfter; // regs read    by instructions after cand
-
-  if (BranchIt == MBB.begin())
-    return false;
-
-  auto I = BranchIt;
-  while (I != MBB.begin()) {
-    --I;
-    MachineInstr &MI = *I;
-
-    // Stop at anything that cannot be safely bypassed.
-    if (MI.isBranch() || MI.isCall() || MI.isReturn() || MI.hasDelaySlot())
-      return false;
-
-    // These cannot be safely reordered or reasoned about.
-    if (MI.mayStore() || MI.hasUnmodeledSideEffects() ||
-        MI.isInlineAsm() || MI.isPseudo())
-      return false;
-
-    // Loads are generally fine to hoist as long as register hazards are clear.
-    // (MicroBlaze memory is not reordered relative to other instructions in the
-    // delay slot — the delay slot just executes one cycle later.)
-
-    SmallSet<MCPhysReg, 8> CandDefs, CandUses;
-    collectRegs(MI, CandDefs, CandUses);
-
-    // WAW hazard: MI defines a reg that a later instruction also defines.
-    // Moving MI after those instructions would leave the wrong final value.
-    if (overlaps(CandDefs, DefsAfter))
-      goto next;
-
-    // WAR hazard: MI defines a reg that a later instruction reads.
-    // Moving MI after those instructions would change what they read.
-    if (overlaps(CandDefs, UsesAfter))
-      goto next;
-
-    // RAW hazard: MI reads a reg that a later instruction writes.
-    // Moving MI after those instructions would make MI read a new value.
-    if (overlaps(CandUses, DefsAfter))
-      goto next;
-
-    // MI must not define a reg the branch also defines (e.g. both writing R15).
-    if (overlaps(CandDefs, BranchDefs))
-      goto next;
-
-    // Conservative backedge guard: do not hoist an instruction that defines a
-    // register the branch reads.  On a loop backedge the branch would read
-    // the delay-slot value on the *next* iteration but an uninitialized value
-    // on the *first* iteration.
-    if (overlaps(CandDefs, BranchUses))
-      goto next;
-
-    {
-      // MI is safe to hoist: splice it into the delay slot position.
-      auto InsertPt = std::next(BranchIt);
-      MBB.splice(InsertPt, &MBB, I);
-      return true;
+// Insert clones of Filler into each predecessor's delay slot (or block end).
+// Mirrors MipsDelaySlotFiller::insertDelayFiller.
+static void insertDelayFiller(MachineBasicBlock::iterator Filler,
+                               const BB2BrMap &BrMap) {
+  MachineFunction *MF = Filler->getParent()->getParent();
+  for (const auto &[Pred, BrMI] : BrMap) {
+    MachineInstr *Clone = MF->CloneMachineInstr(&*Filler);
+    if (BrMI) {
+      Pred->insert(std::next(MachineBasicBlock::iterator(BrMI)), Clone);
+    } else {
+      Pred->push_back(Clone);
     }
-
-  next:
-    // Accumulate hazards so we can check candidates further back.
-    for (MCPhysReg R : CandDefs) DefsAfter.insert(R);
-    for (MCPhysReg R : CandUses) UsesAfter.insert(R);
+    ++UsefulSlots;
   }
-  return false;
 }
 
+// Register any defs of Filler as live-in to MBB (needed after hoisting out).
+// Mirrors MipsDelaySlotFiller::addLiveInRegs.
+static void addLiveInRegs(MachineBasicBlock::iterator Filler,
+                           MachineBasicBlock &MBB) {
+  for (const MachineOperand &MO : Filler->operands()) {
+    if (!MO.isReg() || !MO.isDef() || !MO.getReg())
+      continue;
+    MCPhysReg R = MO.getReg().asMCReg();
+    if (!MBB.isLiveIn(R))
+      MBB.addLiveIn(R);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pass implementation
+// ---------------------------------------------------------------------------
+
 bool MicroBlazeDelaySlotFiller::runOnMachineFunction(MachineFunction &MF) {
+  FilledBranches.clear();
   const TargetInstrInfo *TII =
       MF.getSubtarget<MicroBlazeSubtarget>().getInstrInfo();
   bool Changed = false;
@@ -206,29 +225,213 @@ bool MicroBlazeDelaySlotFiller::runOnMachineFunction(MachineFunction &MF) {
       if (!I->hasDelaySlot())
         continue;
 
-      if (tryFillSlot(MBB, I, TII)) {
-        // Successfully hoisted an instruction; the filler is now at next(I).
-        ++I;
+      bool Filled = false;
+      if (searchBackward(MBB, I, TII)) {
+        Filled = true;
+      } else if (I->isTerminator() && searchSuccBBs(MBB, I, TII)) {
+        Filled = true;
+      }
+
+      if (Filled) {
+        FilledBranches.insert(&*I);
+        ++FilledSlots;
+        ++I; // skip the filler; outer loop advances past it
       } else if (unsigned NoDelayOpc = getNoDelayVariant(I->getOpcode())) {
-        // No productive filler found, but a no-delay form exists.
-        // Swap the opcode in-place — operand lists are identical between the
-        // delay and no-delay variants, only the encoding's delay bit differs.
+        // No productive filler found but a no-delay form exists: swap in-place.
         I->setDesc(TII->get(NoDelayOpc));
-        // No delay slot instruction follows; do not advance I.
+        // No delay slot follows; do not advance I.
       } else {
         // No productive filler and no no-delay form (call or return).
-        // Insert a NOP into the delay slot.
-        auto InsertPt = std::next(I);
-        BuildMI(MBB, InsertPt, I->getDebugLoc(), TII->get(MicroBlaze::NOP));
+        BuildMI(MBB, std::next(I), I->getDebugLoc(), TII->get(MicroBlaze::NOP));
+        FilledBranches.insert(&*I);
+        ++FilledSlots;
         ++I;
       }
       Changed = true;
     }
   }
+
+  if (Changed)
+    MF.getRegInfo().invalidateLiveness();
   return Changed;
 }
 
-char MicroBlazeDelaySlotFiller::ID = 0;
+bool MicroBlazeDelaySlotFiller::searchBackward(
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator BranchIt,
+    const TargetInstrInfo *TII) const {
+  SmallSet<MCPhysReg, 8> BranchDefs, BranchUses;
+  collectRegs(*BranchIt, BranchDefs, BranchUses);
+
+  SmallSet<MCPhysReg, 8> DefsAfter, UsesAfter;
+
+  if (BranchIt == MBB.begin())
+    return false;
+
+  auto I = BranchIt;
+  while (I != MBB.begin()) {
+    --I;
+    MachineInstr &MI = *I;
+
+    if (MI.isBranch() || MI.isCall() || MI.isReturn() || MI.hasDelaySlot())
+      return false;
+
+    if (MI.mayStore() || MI.hasUnmodeledSideEffects() ||
+        MI.isInlineAsm() || MI.isPseudo())
+      return false;
+
+    SmallSet<MCPhysReg, 8> CandDefs, CandUses;
+    collectRegs(MI, CandDefs, CandUses);
+
+    if (overlaps(CandDefs, DefsAfter))  goto next;
+    if (overlaps(CandDefs, UsesAfter))  goto next;
+    if (overlaps(CandUses, DefsAfter))  goto next;
+    if (overlaps(CandDefs, BranchDefs)) goto next;
+    // Conservative backedge guard: do not define a register the branch reads.
+    if (overlaps(CandDefs, BranchUses)) goto next;
+
+    {
+      MBB.splice(std::next(BranchIt), &MBB, I);
+      ++UsefulSlots;
+      return true;
+    }
+
+  next:
+    for (MCPhysReg R : CandDefs) DefsAfter.insert(R);
+    for (MCPhysReg R : CandUses) UsesAfter.insert(R);
+  }
+  return false;
+}
+
+MachineBasicBlock *
+MicroBlazeDelaySlotFiller::selectSuccBB(MachineBasicBlock &MBB) const {
+  if (MBB.succ_empty())
+    return nullptr;
+  auto &Prob =
+      getAnalysis<MachineBranchProbabilityInfoWrapperPass>().getMBPI();
+  MachineBasicBlock *S =
+      *llvm::max_element(MBB.successors(),
+                         [&](const MachineBasicBlock *A,
+                             const MachineBasicBlock *B) {
+                           return Prob.getEdgeProbability(&MBB, A) <
+                                  Prob.getEdgeProbability(&MBB, B);
+                         });
+  return S->isEHPad() ? nullptr : S;
+}
+
+bool MicroBlazeDelaySlotFiller::examinePred(MachineBasicBlock &Pred,
+                                             const MachineBasicBlock &Succ,
+                                             SmallSet<MCPhysReg, 8> &BannedDefs,
+                                             bool &HasMultipleSuccs,
+                                             BB2BrMap &BrMap) const {
+  // Walk backward through Pred's terminators looking for a branch to Succ.
+  MachineInstr *BrMI = nullptr;
+  for (auto I = Pred.rbegin(); I != Pred.rend(); ++I) {
+    if (I->isDebugInstr() || I->isImplicitDef())
+      continue;
+    if (!I->isBranch())
+      break; // no branch at end of block; Pred falls through to Succ
+
+    bool TargetsSucc = false;
+    for (const MachineOperand &MO : I->operands())
+      if (MO.isMBB() && MO.getMBB() == &Succ) { TargetsSucc = true; break; }
+
+    if (TargetsSucc) {
+      // Must have an unoccupied delay slot to accept the clone.
+      if (!I->hasDelaySlot() || FilledBranches.count(&*I))
+        return false;
+      BrMI = &*I;
+      break;
+    }
+  }
+  // BrMI == nullptr: Pred falls straight through to Succ (no direct branch).
+
+  if (BrMI) {
+    // The clone lives in BrMI's delay slot.  An unconditional branch's delay
+    // slot executes only on the taken path (→ Succ), so no additional banning
+    // is needed.  A conditional branch's delay slot executes on both the taken
+    // path (→ Succ) and the fall-through path (→ OtherSucc), so we must ban
+    // registers live-in to OtherSucc.  Mirrors MIPS: addLiveOut only for Cond.
+    if (BrMI->isConditionalBranch()) {
+      HasMultipleSuccs = true;
+      for (const MachineBasicBlock *S : Pred.successors())
+        if (S != &Succ)
+          for (const auto &LI : S->liveins())
+            BannedDefs.insert(MCPhysReg(LI.PhysReg));
+    }
+  } else {
+    // Fall-through case (push_back).  Only proceed if Pred has no terminal
+    // branches at all; if there is any branch (even to another target) the
+    // clone would land in that branch's delay slot and require complex analysis.
+    for (auto I = Pred.rbegin(); I != Pred.rend(); ++I) {
+      if (I->isDebugInstr() || I->isImplicitDef())
+        continue;
+      if (I->isBranch())
+        return false;
+      break;
+    }
+  }
+
+  BrMap[&Pred] = BrMI;
+  return true;
+}
+
+bool MicroBlazeDelaySlotFiller::searchSuccBBs(
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator Slot,
+    const TargetInstrInfo *TII) const {
+  MachineBasicBlock *SuccBB = selectSuccBB(MBB);
+  if (!SuccBB)
+    return false;
+
+  // BannedDefs: registers the filler must not define — live-in to non-Succ
+  // paths that would also execute the delay slot clone.
+  SmallSet<MCPhysReg, 8> BannedDefs;
+  bool HasMultipleSuccs = false;
+  BB2BrMap BrMap;
+
+  for (MachineBasicBlock *Pred : SuccBB->predecessors())
+    if (!examinePred(*Pred, *SuccBB, BannedDefs, HasMultipleSuccs, BrMap))
+      return false;
+
+  // Also ban registers written by the branch itself (e.g. R15 for bralid).
+  SmallSet<MCPhysReg, 8> BranchDefs, BranchUses;
+  collectRegs(*Slot, BranchDefs, BranchUses);
+  for (MCPhysReg R : BranchDefs)
+    BannedDefs.insert(R);
+
+  // Scan SuccBB forward for the first instruction safe to hoist.
+  SmallSet<MCPhysReg, 8> DefsAfter, UsesAfter;
+  for (auto I = SuccBB->begin(); I != SuccBB->end(); ++I) {
+    MachineInstr &MI = *I;
+    if (MI.isDebugInstr())
+      continue;
+
+    // Stop at anything that cannot be safely pre-executed.
+    if (MI.isBranch() || MI.isCall() || MI.isReturn() || MI.hasDelaySlot() ||
+        MI.mayStore() || MI.hasUnmodeledSideEffects() ||
+        MI.isInlineAsm() || MI.isPseudo())
+      break;
+
+    SmallSet<MCPhysReg, 8> CandDefs, CandUses;
+    collectRegs(MI, CandDefs, CandUses);
+
+    bool Safe = !overlaps(CandDefs, BannedDefs) &&
+                !overlaps(CandDefs, DefsAfter)  &&
+                !overlaps(CandDefs, UsesAfter)  &&
+                !overlaps(CandUses, DefsAfter)  &&
+                !overlaps(CandDefs, BranchUses);
+
+    if (Safe) {
+      insertDelayFiller(I, BrMap);
+      addLiveInRegs(I, *SuccBB);
+      I->eraseFromParent();
+      return true;
+    }
+
+    for (MCPhysReg R : CandDefs) DefsAfter.insert(R);
+    for (MCPhysReg R : CandUses) UsesAfter.insert(R);
+  }
+  return false;
+}
 
 FunctionPass *llvm::createMicroBlazeDelaySlotFiller() {
   return new MicroBlazeDelaySlotFiller();
