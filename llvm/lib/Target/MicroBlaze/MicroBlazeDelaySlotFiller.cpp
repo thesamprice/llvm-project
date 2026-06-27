@@ -16,8 +16,15 @@
 // avoids first-iteration undefined-register bugs on backedges).
 //
 // The filler scans backward from each delay-slot branch within the same basic
-// block for the first instruction that is safe to hoist.  If none is found it
-// inserts a NOP.
+// block for the first instruction that is safe to hoist.  If none is found:
+//
+//   - For conditional/unconditional branches: switch to the equivalent no-delay
+//     opcode (e.g. BNEID → BNEI).  Semantics are identical; the no-delay form
+//     just does not require a following instruction.
+//
+//   - For calls and returns (BRALID, BRALD, BRLID, BRLD, RTSD, RTID, RTBD,
+//     RTED): the MicroBlaze ISA provides no no-delay equivalent.  A NOP is
+//     inserted into the delay slot.
 //
 //===----------------------------------------------------------------------===//
 
@@ -53,6 +60,35 @@ struct MicroBlazeDelaySlotFiller : public MachineFunctionPass {
 
 } // namespace
 
+// Return the no-delay equivalent opcode for a delayed branch, or 0 if none
+// exists.  Calls (BRALID, BRALD, BRLID, BRLD) and returns (RTSD, RTID, RTBD,
+// RTED) have no no-delay form in the MicroBlaze ISA; they always need a slot.
+static unsigned getNoDelayVariant(unsigned Opc) {
+  switch (Opc) {
+  // Unconditional branches — immediate target
+  case MicroBlaze::BRID:  return MicroBlaze::BRI;
+  case MicroBlaze::BRAID: return MicroBlaze::BRAI;
+  // Unconditional branches — register target
+  case MicroBlaze::BRD:   return MicroBlaze::BR_;
+  case MicroBlaze::BRAD:  return MicroBlaze::BRA;
+  // Conditional branches — immediate target
+  case MicroBlaze::BEQID: return MicroBlaze::BEQI;
+  case MicroBlaze::BNEID: return MicroBlaze::BNEI;
+  case MicroBlaze::BLTID: return MicroBlaze::BLTI;
+  case MicroBlaze::BLEID: return MicroBlaze::BLEI;
+  case MicroBlaze::BGTID: return MicroBlaze::BGTI;
+  case MicroBlaze::BGEID: return MicroBlaze::BGEI;
+  // Conditional branches — register target
+  case MicroBlaze::BEQD:  return MicroBlaze::BEQ;
+  case MicroBlaze::BNED:  return MicroBlaze::BNE;
+  case MicroBlaze::BLTD:  return MicroBlaze::BLT;
+  case MicroBlaze::BLED:  return MicroBlaze::BLE;
+  case MicroBlaze::BGTD:  return MicroBlaze::BGT;
+  case MicroBlaze::BGED:  return MicroBlaze::BGE;
+  default: return 0;
+  }
+}
+
 // Collect all register numbers explicitly read/written by MI into the sets.
 // MicroBlaze has no sub-registers, so MCPhysReg identity is sufficient.
 static void collectRegs(const MachineInstr &MI,
@@ -80,7 +116,7 @@ static bool overlaps(const SmallSet<MCPhysReg, 8> &A,
 
 // Try to find an instruction earlier in MBB that can be legally moved into the
 // delay slot immediately after BranchIt.  If found, splice it there and return
-// true.  Otherwise return false (caller should insert a NOP).
+// true.  Otherwise return false.
 static bool tryFillSlot(MachineBasicBlock &MBB,
                         MachineBasicBlock::iterator BranchIt,
                         const TargetInstrInfo *TII) {
@@ -170,14 +206,23 @@ bool MicroBlazeDelaySlotFiller::runOnMachineFunction(MachineFunction &MF) {
       if (!I->hasDelaySlot())
         continue;
 
-      if (!tryFillSlot(MBB, I, TII)) {
-        // No candidate found — insert a NOP.
+      if (tryFillSlot(MBB, I, TII)) {
+        // Successfully hoisted an instruction; the filler is now at next(I).
+        ++I;
+      } else if (unsigned NoDelayOpc = getNoDelayVariant(I->getOpcode())) {
+        // No productive filler found, but a no-delay form exists.
+        // Swap the opcode in-place — operand lists are identical between the
+        // delay and no-delay variants, only the encoding's delay bit differs.
+        I->setDesc(TII->get(NoDelayOpc));
+        // No delay slot instruction follows; do not advance I.
+      } else {
+        // No productive filler and no no-delay form (call or return).
+        // Insert a NOP into the delay slot.
         auto InsertPt = std::next(I);
-        BuildMI(MBB, InsertPt, DebugLoc(), TII->get(MicroBlaze::NOP));
+        BuildMI(MBB, InsertPt, I->getDebugLoc(), TII->get(MicroBlaze::NOP));
+        ++I;
       }
       Changed = true;
-      // Either way the delay slot instruction is now at std::next(I); skip it.
-      ++I;
     }
   }
   return Changed;
