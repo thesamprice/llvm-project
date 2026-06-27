@@ -513,6 +513,16 @@ MachineBasicBlock *MicroBlazeTargetLowering::EmitInstrWithCustomInserter(
 SDValue MicroBlazeTargetLowering::LowerShift(SDValue Op,
                                               SelectionDAG &DAG) const {
   SDLoc DL(Op);
+  EVT VT = Op.getValueType();
+
+  // shl x, 1 → add x, x.  InstCombine canonicalizes (add x, x) to (shl x, 1)
+  // at the IR level, so this is the common case for pointer/index doubling.
+  // Emitting addk saves the __ashlsi3 call+return overhead (~10 instructions).
+  if (Op.getOpcode() == ISD::SHL)
+    if (auto *C = dyn_cast<ConstantSDNode>(Op.getOperand(1)))
+      if (C->getZExtValue() == 1)
+        return DAG.getNode(ISD::ADD, DL, VT, Op.getOperand(0), Op.getOperand(0));
+
   RTLIB::Libcall LC;
   switch (Op.getOpcode()) {
   case ISD::SHL: LC = RTLIB::getSHL(MVT::i32); break;
