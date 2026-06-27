@@ -534,6 +534,15 @@ SDValue MicroBlazeTargetLowering::LowerBR_CC(SDValue Op,
   SDValue RHS  = Op.getOperand(3);
   SDValue Dest = Op.getOperand(4);
 
+  // Zero-test: SETEQ/SETNE against zero needs no comparison instruction.
+  // MicroBlaze beqid/bneid compare the operand register directly against zero,
+  // so both the cmp/rsubk paths below would emit a redundant instruction.
+  if ((CC == ISD::SETEQ || CC == ISD::SETNE) && isNullConstant(RHS)) {
+    SDValue CCVal = DAG.getConstant(CC, DL, MVT::i32);
+    return DAG.getNode(MicroBlazeISD::BR_CC, DL, MVT::Other,
+                       Chain, CCVal, LHS, Dest);
+  }
+
   if (Subtarget.hasPatternCompare()) {
     bool IsUnsignedIneq = (CC == ISD::SETUGT || CC == ISD::SETUGE ||
                            CC == ISD::SETULT || CC == ISD::SETULE);
