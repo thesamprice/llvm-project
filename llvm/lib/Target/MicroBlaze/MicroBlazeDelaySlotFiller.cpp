@@ -107,9 +107,9 @@ static bool tryFillSlot(MachineBasicBlock &MBB,
     if (MI.isBranch() || MI.isCall() || MI.isReturn() || MI.hasDelaySlot())
       return false;
 
-    // Stores may have observable side effects; don't try to move them past
-    // other instructions.
-    if (MI.mayStore())
+    // These cannot be safely reordered or reasoned about.
+    if (MI.mayStore() || MI.hasUnmodeledSideEffects() ||
+        MI.isInlineAsm() || MI.isPseudo())
       return false;
 
     // Loads are generally fine to hoist as long as register hazards are clear.
