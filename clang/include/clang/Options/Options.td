@@ -224,6 +224,8 @@ def m_hexagon_Features_HVX_Group : OptionGroup<"<hexagon features group>">,
                                    Group<m_Group>, DocName<"Hexagon HVX">;
 def m_m68k_Features_Group: OptionGroup<"<m68k features group>">,
                            Group<m_Group>, DocName<"M68k">;
+def m_microblaze_Features_Group : OptionGroup<"<microblaze features group>">,
+                                  Group<m_Group>, DocName<"MicroBlaze">;
 def m_mips_Features_Group : OptionGroup<"<mips features group>">,
                             Group<m_Group>, DocName<"MIPS">;
 def m_ppc_Features_Group : OptionGroup<"<ppc features group>">,
@@ -7126,6 +7128,52 @@ foreach i = {0-6} in
 foreach i = {0-7} in
   def ffixed_d#i : Flag<["-"], "ffixed-d"#i>, Group<m_m68k_Features_Group>,
     HelpText<"Reserve the d"#i#" register (M68k only)">;
+} // let Flags = [TargetSpecific]
+
+// MicroBlaze feature flags — mirror GCC's -m flags so scripts work unmodified.
+let Flags = [TargetSpecific] in {
+def mxl_barrel_shift : Flag<["-"], "mxl-barrel-shift">,
+  Group<m_microblaze_Features_Group>,
+  HelpText<"Enable hardware barrel shifter">;
+def mno_xl_barrel_shift : Flag<["-"], "mno-xl-barrel-shift">,
+  Group<m_microblaze_Features_Group>,
+  HelpText<"Disable hardware barrel shifter (default)">;
+def mxl_pattern_compare : Flag<["-"], "mxl-pattern-compare">,
+  Group<m_microblaze_Features_Group>,
+  HelpText<"Enable pattern compare instructions">;
+def mno_xl_pattern_compare : Flag<["-"], "mno-xl-pattern-compare">,
+  Group<m_microblaze_Features_Group>,
+  HelpText<"Disable pattern compare instructions (default)">;
+def mno_xl_soft_div : Flag<["-"], "mno-xl-soft-div">,
+  Group<m_microblaze_Features_Group>,
+  HelpText<"Enable hardware integer divide">;
+def mxl_soft_div : Flag<["-"], "mxl-soft-div">,
+  Group<m_microblaze_Features_Group>,
+  HelpText<"Use software integer divide (default)">;
+def mxl_multiply_high : Flag<["-"], "mxl-multiply-high">,
+  Group<m_microblaze_Features_Group>,
+  HelpText<"Enable multiply high instructions">;
+def mno_xl_multiply_high : Flag<["-"], "mno-xl-multiply-high">,
+  Group<m_microblaze_Features_Group>,
+  HelpText<"Disable multiply high instructions (default)">;
+def mxl_reorder : Flag<["-"], "mxl-reorder">,
+  Group<m_microblaze_Features_Group>,
+  HelpText<"Enable byte/halfword reorder instructions (swapb, swaph; C_USE_REORDER_INSTR=1)">;
+def mno_xl_reorder : Flag<["-"], "mno-xl-reorder">,
+  Group<m_microblaze_Features_Group>,
+  HelpText<"Disable reorder instructions (default)">;
+def mno_xl_soft_float : Flag<["-"], "mno-xl-soft-float">,
+  Group<m_microblaze_Features_Group>,
+  HelpText<"Enable hardware floating-point unit (C_USE_FPU=1; equivalent to -mhard-float)">;
+def mxl_soft_float : Flag<["-"], "mxl-soft-float">,
+  Group<m_microblaze_Features_Group>,
+  HelpText<"Use software floating-point emulation (default; C_USE_FPU=0; equivalent to -msoft-float)">;
+def mxl_float_convert : Flag<["-"], "mxl-float-convert">,
+  Group<m_microblaze_Features_Group>,
+  HelpText<"Enable hardware floating-point conversion instructions (flt, fint, fsqrt; C_USE_FPU=2)">;
+def mno_xl_float_convert : Flag<["-"], "mno-xl-float-convert">,
+  Group<m_microblaze_Features_Group>,
+  HelpText<"Disable hardware floating-point conversion instructions (default)">;
 } // let Flags = [TargetSpecific]
 
 // X86 feature flags
