@@ -29,7 +29,9 @@ def IIC_MUL : InstrItinClass; // 3-cycle: mul, muli, mulh, mulhu, mulhsu
 def IIC_LD  : InstrItinClass; // 2-cycle: load word/half/byte
 def IIC_ST  : InstrItinClass; // 1-cycle: store (no result register)
 def IIC_DIV : InstrItinClass; // 34-cycle: idiv, idivu
-def IIC_FPU : InstrItinClass; // 6-cycle: fadd, fmul, fdiv, fcmp (conservative)
+def IIC_FPUAdd : InstrItinClass; // 6-cycle: fadd, frsub, fcmp (C_AREA_OPTIMIZED=0)
+def IIC_FPUMul : InstrItinClass; // 5-cycle: fmul (C_AREA_OPTIMIZED=0)
+def IIC_FPUDiv : InstrItinClass; // 32-cycle: fdiv, fsqrt (C_AREA_OPTIMIZED=0)
 def IIC_SPR : InstrItinClass; // 2-cycle: mfs, mts, msrset, msrclr
 
 //===----------------------------------------------------------------------===//
@@ -43,7 +45,9 @@ def MicroBlazeItinerary : ProcessorItineraries<
   InstrItinData<IIC_LD,  [InstrStage<2,  [LDST_FU]>]>,
   InstrItinData<IIC_ST,  [InstrStage<1,  [LDST_FU]>]>,
   InstrItinData<IIC_DIV, [InstrStage<34, [MUL_FU]>]>,
-  InstrItinData<IIC_FPU, [InstrStage<6,  [FP_FU]>]>,
+  InstrItinData<IIC_FPUAdd, [InstrStage<6,  [FP_FU]>]>,
+  InstrItinData<IIC_FPUMul, [InstrStage<5,  [FP_FU]>]>,
+  InstrItinData<IIC_FPUDiv, [InstrStage<32, [FP_FU]>]>,
   InstrItinData<IIC_SPR, [InstrStage<2,  [ALU_FU]>]>,
 ]>;
 

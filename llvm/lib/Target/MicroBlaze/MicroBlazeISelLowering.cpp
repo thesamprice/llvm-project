@@ -35,8 +35,15 @@ using namespace llvm;
 MicroBlazeTargetLowering::MicroBlazeTargetLowering(
     const MicroBlazeTargetMachine &TM, const MicroBlazeSubtarget &STI)
     : TargetLowering(TM, STI), Subtarget(STI) {
-  // i32 is the only native value type.
+  // i32 is always a native value type.
   addRegisterClass(MVT::i32, &MicroBlaze::GPRRegClass);
+
+  // With +hard-float, f32 values live in the same GPRs and are operated on
+  // by hardware FPU instructions (opcode 0x16).  Register f32 as a legal
+  // type so SelectionDAG can type-check and allocate FPR operands.
+  if (STI.hasHardFloat())
+    addRegisterClass(MVT::f32, &MicroBlaze::FPRRegClass);
+
   computeRegisterProperties(STI.getRegisterInfo());
 
   setStackPointerRegisterToSaveRestore(MicroBlaze::R1);
@@ -255,6 +262,33 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
     setLibcallImpl(RTLIB::FMIN_F64,      RTLIB::impl_fmin);
     setLibcallImpl(RTLIB::FMAX_F64,      RTLIB::impl_fmax);
     setLibcallImpl(RTLIB::LDEXP_F64,     RTLIB::impl_ldexp);
+  } else {
+    // Hard-float: f32 arithmetic is Legal via TableGen FPU instruction
+    // patterns.  Operations not covered by hardware remain expanded.
+    //
+    // FADD / FSUB / FMUL / FDIV are available with +hard-float.
+    // FSQRT / SINT_TO_FP / FP_TO_SINT require +float-convert in addition.
+    // Everything else (FNEG, FABS, FP extensions, comparisons via SETCC)
+    // expands to the soft-float libcall sequence because MicroBlaze provides
+    // no dedicated instructions for those operations.
+    setOperationAction(ISD::FADD, MVT::f32, Legal);
+    setOperationAction(ISD::FSUB, MVT::f32, Legal);
+    setOperationAction(ISD::FMUL, MVT::f32, Legal);
+    setOperationAction(ISD::FDIV, MVT::f32, Legal);
+    if (STI.hasFloatConvert()) {
+      setOperationAction(ISD::FSQRT,     MVT::f32, Legal);
+      setOperationAction(ISD::SINT_TO_FP, MVT::i32, Legal);
+      setOperationAction(ISD::FP_TO_SINT, MVT::f32, Legal);
+    }
+    // FNEG has no hardware instruction; expand to (frsub 0.0, x) or libcall.
+    setOperationAction(ISD::FNEG,       MVT::f32, Expand);
+    setOperationAction(ISD::FABS,       MVT::f32, Expand);
+    setOperationAction(ISD::FP_EXTEND,  MVT::f64, Expand);
+    setOperationAction(ISD::FP_ROUND,   MVT::f32, Expand);
+    // FP comparisons are lowered via soft-float libcalls for now; hardware
+    // fcmp wiring (converting the float 0/1 result to an i1 branch) is a
+    // follow-on pass.
+    setOperationAction(ISD::SETCC,      MVT::f32, Expand);
   }
 
   // Lower global addresses and external symbols via our wrapper node.
