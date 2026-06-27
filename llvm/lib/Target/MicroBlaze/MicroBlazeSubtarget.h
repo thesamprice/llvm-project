@@ -10,6 +10,7 @@
 #define LLVM_LIB_TARGET_MICROBLAZE_MICROBLAZESUBTARGET_H
 
 #include "MicroBlazeFrameLowering.h"
+#include "MicroBlazeInstrInfo.h"
 #include "MicroBlazeRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DataLayout.h"
@@ -31,6 +32,7 @@ class MicroBlazeSubtarget : public MicroBlazeGenSubtargetInfo {
   bool HasHardFloat = false;
   bool HasFloatConvert = false;
 
+  MicroBlazeInstrInfo InstrInfo;
   MicroBlazeRegisterInfo RegInfo;
   MicroBlazeFrameLowering FrameLowering;
 
@@ -40,6 +42,9 @@ public:
 
   void ParseSubtargetFeatures(StringRef CPU, StringRef TuneCPU, StringRef FS);
 
+  const MicroBlazeInstrInfo *getInstrInfo() const override {
+    return &InstrInfo;
+  }
   const MicroBlazeRegisterInfo *getRegisterInfo() const override {
     return &RegInfo;
   }

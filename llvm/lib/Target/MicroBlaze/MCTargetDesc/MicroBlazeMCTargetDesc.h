@@ -23,4 +23,8 @@ class Target;
 #define GET_SUBTARGETINFO_ENUM
 #include "MicroBlazeGenSubtargetInfo.inc"
 
+// MicroBlaze instruction opcode enum (MicroBlaze::ADDK, etc.).
+#define GET_INSTRINFO_ENUM
+#include "MicroBlazeGenInstrInfo.inc"
+
 #endif // LLVM_LIB_TARGET_MICROBLAZE_MCTARGETDESC_MICROBLAZEMCTARGETDESC_H
