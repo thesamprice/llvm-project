@@ -7215,6 +7215,9 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
       case llvm::Triple::msp430:
         TC = std::make_unique<toolchains::MSP430ToolChain>(*this, Target, Args);
         break;
+      case llvm::Triple::microblazeel:
+        TC = std::make_unique<toolchains::BareMetal>(*this, Target, Args);
+        break;
       case llvm::Triple::riscv32:
       case llvm::Triple::riscv64:
       case llvm::Triple::riscv32be:

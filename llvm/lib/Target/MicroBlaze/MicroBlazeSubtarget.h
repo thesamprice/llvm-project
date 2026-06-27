@@ -13,6 +13,7 @@
 #include "MicroBlazeISelLowering.h"
 #include "MicroBlazeInstrInfo.h"
 #include "MicroBlazeRegisterInfo.h"
+#include "llvm/CodeGen/LibcallLoweringInfo.h"
 #include "llvm/CodeGen/SelectionDAGTargetInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DataLayout.h"
@@ -71,6 +72,8 @@ public:
   bool hasReorderInstr() const { return HasReorderInstr; }
   bool hasHardFloat() const { return HasHardFloat; }
   bool hasFloatConvert() const { return HasFloatConvert; }
+
+  void initLibcallLoweringInfo(LibcallLoweringInfo &Info) const override;
 };
 
 } // namespace llvm

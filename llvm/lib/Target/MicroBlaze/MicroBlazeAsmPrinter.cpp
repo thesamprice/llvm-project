@@ -28,6 +28,15 @@ public:
                                  std::unique_ptr<MCStreamer> Streamer)
       : AsmPrinter(TM, std::move(Streamer)) {}
 
+  // The delay-slot filler inserts a NOP (non-terminator) between the branch
+  // and the next real terminator, which breaks getFirstTerminator()'s backward
+  // scan and causes the base class to incorrectly classify a branch-target
+  // block as fall-through-only, suppressing its label.  Always emit labels.
+  bool isBlockOnlyReachableByFallthrough(
+      const MachineBasicBlock *) const override {
+    return false;
+  }
+
   StringRef getPassName() const override { return "MicroBlaze Assembly Printer"; }
 
   void emitInstruction(const MachineInstr *MI) override;

@@ -21,33 +21,54 @@
 //     fcmp.gt OpSel=0b100 → func=0x240
 //     fcmp.ne OpSel=0b101 → func=0x250
 //     fcmp.ge OpSel=0b110 → func=0x260
+//
+// hasSideEffects = 0, mayRaiseFPException = 1: these instructions have no
+// architectural memory side effects; the only observable side effect is
+// raising an IEEE 754 exception visible through the FP environment register
+// (FSR).  Using mayRaiseFPException (not hasSideEffects) allows the scheduler
+// and CSE to freely reorder FPU ops relative to each other and to integer
+// ops, while still respecting strict-FP barriers where required (UG984 §5).
 //===----------------------------------------------------------------------===//
 
-let Predicates = [HasHardFloatPred], hasSideEffects = 1 in {
-  def FADD  : MBA<0x16, 0x000, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                  "fadd\t$rD, $rA, $rB", []>;
-  def FRSUB : MBA<0x16, 0x080, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                  "frsub\t$rD, $rA, $rB", []>;
-  def FMUL  : MBA<0x16, 0x100, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                  "fmul\t$rD, $rA, $rB", []>;
-  def FDIV  : MBA<0x16, 0x180, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                  "fdiv\t$rD, $rA, $rB", []>;
+let Predicates = [HasHardFloatPred],
+    hasSideEffects = 0, mayRaiseFPException = 1 in {
+  def FADD  : MBA<0x16, 0x000, (outs FPR:$rD), (ins FPR:$rA, FPR:$rB),
+                  "fadd\t$rD, $rA, $rB",
+                  [(set FPR:$rD, (fadd FPR:$rA, FPR:$rB))], IIC_FPUAdd>;
+  // frsub rD, rA, rB computes rD = rB - rA (operands reversed vs. subtract).
+  // The DAG pattern swaps the operands so (fsub $a, $b) → frsub $b, $a.
+  def FRSUB : MBA<0x16, 0x080, (outs FPR:$rD), (ins FPR:$rA, FPR:$rB),
+                  "frsub\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+  def FMUL  : MBA<0x16, 0x100, (outs FPR:$rD), (ins FPR:$rA, FPR:$rB),
+                  "fmul\t$rD, $rA, $rB",
+                  [(set FPR:$rD, (fmul FPR:$rA, FPR:$rB))], IIC_FPUMul>;
+  def FDIV  : MBA<0x16, 0x180, (outs FPR:$rD), (ins FPR:$rA, FPR:$rB),
+                  "fdiv\t$rD, $rA, $rB",
+                  [(set FPR:$rD, (fdiv FPR:$rA, FPR:$rB))], IIC_FPUDiv>;
 
-  def FCMP_UN : MBA<0x16, 0x200, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.un\t$rD, $rA, $rB", []>;
-  def FCMP_LT : MBA<0x16, 0x210, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.lt\t$rD, $rA, $rB", []>;
-  def FCMP_EQ : MBA<0x16, 0x220, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.eq\t$rD, $rA, $rB", []>;
-  def FCMP_LE : MBA<0x16, 0x230, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.le\t$rD, $rA, $rB", []>;
-  def FCMP_GT : MBA<0x16, 0x240, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.gt\t$rD, $rA, $rB", []>;
-  def FCMP_NE : MBA<0x16, 0x250, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.ne\t$rD, $rA, $rB", []>;
-  def FCMP_GE : MBA<0x16, 0x260, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.ge\t$rD, $rA, $rB", []>;
+  // fcmp variants write a float result (0.0 or 1.0) to a GPR.  They are
+  // defined here for encoding completeness; SETCC lowering via hardware fcmp
+  // is handled in MicroBlazeISelLowering (deferred — custom lowering needed
+  // to convert the float 0/1 result into an i1 branch condition).
+  def FCMP_UN : MBA<0x16, 0x200, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
+                    "fcmp.un\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+  def FCMP_LT : MBA<0x16, 0x210, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
+                    "fcmp.lt\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+  def FCMP_EQ : MBA<0x16, 0x220, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
+                    "fcmp.eq\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+  def FCMP_LE : MBA<0x16, 0x230, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
+                    "fcmp.le\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+  def FCMP_GT : MBA<0x16, 0x240, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
+                    "fcmp.gt\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+  def FCMP_NE : MBA<0x16, 0x250, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
+                    "fcmp.ne\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+  def FCMP_GE : MBA<0x16, 0x260, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
+                    "fcmp.ge\t$rD, $rA, $rB", [], IIC_FPUAdd>;
 }
+
+// fsub a, b → frsub b, a  (swap operands: frsub rD,rA,rB = rB - rA)
+def : Pat<(fsub f32:$a, f32:$b), (FRSUB FPR:$b, FPR:$a)>,
+      Requires<[HasHardFloatPred]>;
 
 //===----------------------------------------------------------------------===//
 // Floating-point conversion instructions (require +float-convert, opcode 0x16)
@@ -57,11 +78,21 @@ let Predicates = [HasHardFloatPred], hasSideEffects = 1 in {
 //   fsqrt rD, rA — sqrt       func=0x380  (27/29/23 cycles)
 //===----------------------------------------------------------------------===//
 
-let Predicates = [HasFloatConvertPred], hasSideEffects = 1 in {
-  def FLT   : MBA<0x16, 0x280, (outs GPR:$rD), (ins GPR:$rA),
-                  "flt\t$rD, $rA", []> { let rB = 0; }
-  def FINT  : MBA<0x16, 0x300, (outs GPR:$rD), (ins GPR:$rA),
-                  "fint\t$rD, $rA", []> { let rB = 0; }
-  def FSQRT : MBA<0x16, 0x380, (outs GPR:$rD), (ins GPR:$rA),
-                  "fsqrt\t$rD, $rA", []> { let rB = 0; }
+let Predicates = [HasFloatConvertPred],
+    hasSideEffects = 0, mayRaiseFPException = 1 in {
+  def FLT   : MBA<0x16, 0x280, (outs FPR:$rD), (ins GPR:$rA),
+                  "flt\t$rD, $rA",
+                  [(set FPR:$rD, (sint_to_fp GPR:$rA))], IIC_FPUAdd> {
+    let rB = 0;
+  }
+  def FINT  : MBA<0x16, 0x300, (outs GPR:$rD), (ins FPR:$rA),
+                  "fint\t$rD, $rA",
+                  [(set GPR:$rD, (fp_to_sint FPR:$rA))], IIC_FPUAdd> {
+    let rB = 0;
+  }
+  def FSQRT : MBA<0x16, 0x380, (outs FPR:$rD), (ins FPR:$rA),
+                  "fsqrt\t$rD, $rA",
+                  [(set FPR:$rD, (fsqrt FPR:$rA))], IIC_FPUDiv> {
+    let rB = 0;
+  }
 }

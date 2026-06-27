@@ -15,6 +15,7 @@ namespace llvm {
 
 class Triple;
 class MCTargetOptions;
+class MCSpecifierExpr;
 
 class MicroBlazeMCAsmInfo : public MCAsmInfoELF {
   void anchor() override;
@@ -22,6 +23,9 @@ class MicroBlazeMCAsmInfo : public MCAsmInfoELF {
 public:
   explicit MicroBlazeMCAsmInfo(const Triple &TheTriple,
                                const MCTargetOptions &Options);
+
+  void printSpecifierExpr(raw_ostream &OS,
+                          const MCSpecifierExpr &Expr) const override;
 };
 
 } // namespace llvm

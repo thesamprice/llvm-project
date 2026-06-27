@@ -34,6 +34,20 @@ def MBCall : SDNode<"MicroBlazeISD::CALL", SDT_MBCall,
 
 def MBWrapper : SDNode<"MicroBlazeISD::Wrapper", SDTIntUnaryOp>;
 
+// MBGOTLoad: PIC GOT-indirect load.  Maps to LA_GOT (lwi rD, r20, sym@got).
+// Chain is required because the instruction reads memory (the GOT).
+def SDT_MBGOTLoad : SDTypeProfile<1, 1, [SDTCisInt<0>, SDTCisInt<1>]>;
+def MBGOTLoad : SDNode<"MicroBlazeISD::GOT_LOAD", SDT_MBGOTLoad,
+                        [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+
+// MBSelectCC: (TrueV, FalseV, CC_imm, Diff) → result
+// Diff = LHS - RHS; CC_imm is an ISD::CondCode integer constant.
+// Expanded to a diamond CFG by EmitInstrWithCustomInserter.
+def SDT_MBSelectCC : SDTypeProfile<1, 4, [
+    SDTCisSameAs<0, 1>, SDTCisSameAs<1, 2>,
+    SDTCisVT<3, i32>, SDTCisVT<4, i32>]>;
+def MBSelectCC : SDNode<"MicroBlazeISD::SELECT_CC", SDT_MBSelectCC, []>;
+
 //===----------------------------------------------------------------------===//
 // Immediate patterns and address-mode complex patterns
 //===----------------------------------------------------------------------===//
@@ -138,3 +152,21 @@ include "MicroBlazeInstrReorder.td"
 include "MicroBlazeInstrCache.td"
 include "MicroBlazeInstrFPU.td"
 
+//===----------------------------------------------------------------------===//
+// PIC GOT access — LA_GOT
+//===----------------------------------------------------------------------===//
+// Loads the address of a global symbol from the GOT via R20 (GOT base).
+// Encoding: opcode=0x3A (LWI), rA=20 (R20 hardcoded), imm16=LO16(got_off).
+// The MCCodeEmitter prepends an IMM prefix with FIXUP_MICROBLAZE_GOT_64.
+// R_MICROBLAZE_GOT_64 patches the IMM+LWI pair so the linker fills in the
+// GOT-relative offset of the symbol's entry.
+let hasSideEffects = 0, mayLoad = 1, isReMaterializable = 1 in
+def LA_GOT : MBB<0x3A, (outs GPR:$rD), (ins i32imm:$offset),
+                  "la_got\t$rD, $offset", [], IIC_LD> {
+  bits<16> offset;
+  let rA  = 20;      // R20 is the GOT base (hardcoded)
+  let imm = offset;
+}
+
+def : Pat<(i32 (MBGOTLoad tglobaladdr:$sym)),   (LA_GOT tglobaladdr:$sym)>;
+def : Pat<(i32 (MBGOTLoad texternalsym:$sym)),   (LA_GOT texternalsym:$sym)>;

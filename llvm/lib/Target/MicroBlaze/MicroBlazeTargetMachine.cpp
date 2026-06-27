@@ -9,6 +9,7 @@
 #include "MicroBlazeTargetMachine.h"
 #include "MicroBlaze.h"
 #include "MicroBlazeISelDAGToDAG.h"
+#include "MicroBlazeTargetTransformInfo.h"
 #include "TargetInfo/MicroBlazeTargetInfo.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/MC/TargetRegistry.h"
@@ -70,4 +71,9 @@ public:
 TargetPassConfig *
 MicroBlazeTargetMachine::createPassConfig(PassManagerBase &PM) {
   return new MicroBlazePassConfig(*this, PM);
+}
+
+TargetTransformInfo
+MicroBlazeTargetMachine::getTargetTransformInfo(const Function &F) const {
+  return TargetTransformInfo(std::make_unique<MicroBlazeTTIImpl>(this, F));
 }

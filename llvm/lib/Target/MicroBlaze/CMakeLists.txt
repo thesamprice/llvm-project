@@ -27,6 +27,7 @@ add_llvm_target(MicroBlazeCodeGen
   MicroBlazeTargetMachine.cpp
 
   LINK_COMPONENTS
+  Analysis
   AsmPrinter
   CodeGen
   CodeGenTypes

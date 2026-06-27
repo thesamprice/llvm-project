@@ -178,6 +178,8 @@ static std::tuple<ELFKind, uint16_t, uint8_t> parseEmulation(Ctx &ctx,
           .Case("elf64loongarch", {ELF64LEKind, EM_LOONGARCH})
           .Case("elf64_s390", {ELF64BEKind, EM_S390})
           .Case("hexagonelf", {ELF32LEKind, EM_HEXAGON})
+          .Case("elf32microblaze",   {ELF32BEKind, EM_MICROBLAZE})
+          .Case("elf32microblazeel", {ELF32LEKind, EM_MICROBLAZE})
           .Default({ELFNoneKind, EM_NONE});
 
   if (ret.first == ELFNoneKind)

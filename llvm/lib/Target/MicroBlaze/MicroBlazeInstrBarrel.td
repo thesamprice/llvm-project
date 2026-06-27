@@ -7,7 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 // 5-bit unsigned immediate for barrel-shift-immediate shift amount.
-def uimm5 : Operand<i32> {
+// Inheriting ImmLeaf allows this to serve as both an instruction operand
+// and a pattern predicate for constant-amount shift matching.
+def uimm5 : Operand<i32>, ImmLeaf<i32, [{return Imm >= 0 && Imm < 32;}]> {
   let OperandType = "OPERAND_IMMEDIATE";
 }
 
@@ -25,6 +27,17 @@ let Predicates = [HasBarrelShiftPred] in {
   def BSLLI : MBBSI<1, 0, (outs GPR:$rD), (ins GPR:$rA, uimm5:$shamt),
                     "bslli\t$rD, $rA, $shamt", []>;
 
+}
+
+// Constant-amount shift patterns: lower (srl/sra/shl x, imm5) to BSRLI/BSRAI/BSLLI.
+// Register-amount patterns (BSRL/BSRA/BSLL) live in MicroBlazeInstrALU.td.
+let Predicates = [HasBarrelShiftPred] in {
+  def : Pat<(srl GPR:$ra, uimm5:$shamt), (BSRLI GPR:$ra, uimm5:$shamt)>;
+  def : Pat<(sra GPR:$ra, uimm5:$shamt), (BSRAI GPR:$ra, uimm5:$shamt)>;
+  def : Pat<(shl GPR:$ra, uimm5:$shamt), (BSLLI GPR:$ra, uimm5:$shamt)>;
+}
+
+let Predicates = [HasBarrelShiftPred] in {
   // Bit-field extract/insert (opcode=0x19, E/I bits). UG984 §5 Fig 82.
   // BSEFI: extract field of width (IMMW-IMMS+1) bits starting at bit IMMS.
   // BSIFI: insert field; IMMW = shift + width - 1 per assembler convention.
