@@ -40,16 +40,17 @@
 #include "MicroBlaze.h"
 #include "MicroBlazeInstrInfo.h"
 #include "MicroBlazeSubtarget.h"
-#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/MC/MCRegisterInfo.h"
 
 #define GET_INSTRINFO_ENUM
 #include "MicroBlazeGenInstrInfo.inc"
@@ -73,6 +74,9 @@ class MicroBlazeDelaySlotFiller : public MachineFunctionPass {
   // Used by examinePred to detect predecessors that can no longer accept a
   // clone (their slot was filled, NOPed, or converted to a no-delay opcode).
   mutable SmallPtrSet<const MachineInstr *, 8> FilledBranches;
+
+  // Set once per function in runOnMachineFunction; used by all helpers.
+  mutable const TargetRegisterInfo *TRI = nullptr;
 
 public:
   static char ID;
@@ -116,7 +120,7 @@ private:
   /// register defs from other successor live-ins, and adds to BrMap.
   /// Returns false if Pred cannot accept a clone.
   bool examinePred(MachineBasicBlock &Pred, const MachineBasicBlock &Succ,
-                   SmallSet<MCPhysReg, 8> &BannedDefs, bool &HasMultipleSuccs,
+                   BitVector &BannedDefs, bool &HasMultipleSuccs,
                    BB2BrMap &BrMap) const;
 };
 
@@ -157,26 +161,30 @@ static unsigned getNoDelayVariant(unsigned Opc) {
   }
 }
 
-// Collect all register numbers explicitly read/written by MI into the sets.
-// MicroBlaze has no sub-registers, so MCPhysReg identity is sufficient.
+// Collect all register numbers read/written by MI into Defs/Uses, expanding
+// each register to its full alias set via MCRegAliasIterator.  This covers
+// future sub-register pairs (e.g. 64-bit FP or mulh result pairs) correctly.
 static void collectRegs(const MachineInstr &MI,
-                        SmallSet<MCPhysReg, 8> &Defs,
-                        SmallSet<MCPhysReg, 8> &Uses) {
+                        const TargetRegisterInfo *TRI,
+                        BitVector &Defs, BitVector &Uses) {
   for (const MachineOperand &MO : MI.operands()) {
     if (!MO.isReg() || !MO.getReg().isPhysical())
       continue;
     MCPhysReg R = MO.getReg().asMCReg();
-    if (MO.isDef())
-      Defs.insert(R);
-    else
-      Uses.insert(R);
+    for (MCRegAliasIterator AI(R, TRI, /*IncludeSelf=*/true); AI.isValid();
+         ++AI) {
+      if (MO.isDef())
+        Defs.set(*AI);
+      else
+        Uses.set(*AI);
+    }
   }
 }
 
-static bool overlaps(const SmallSet<MCPhysReg, 8> &A,
-                     const SmallSet<MCPhysReg, 8> &B) {
-  for (MCPhysReg R : A)
-    if (B.count(R))
+// True if any bit is set in both A and B.
+static bool overlaps(const BitVector &A, const BitVector &B) {
+  for (unsigned I : A.set_bits())
+    if (B.test(I))
       return true;
   return false;
 }
@@ -216,6 +224,7 @@ static void addLiveInRegs(MachineBasicBlock::iterator Filler,
 
 bool MicroBlazeDelaySlotFiller::runOnMachineFunction(MachineFunction &MF) {
   FilledBranches.clear();
+  TRI = MF.getSubtarget<MicroBlazeSubtarget>().getRegisterInfo();
   const TargetInstrInfo *TII =
       MF.getSubtarget<MicroBlazeSubtarget>().getInstrInfo();
   bool Changed = false;
@@ -259,10 +268,12 @@ bool MicroBlazeDelaySlotFiller::runOnMachineFunction(MachineFunction &MF) {
 bool MicroBlazeDelaySlotFiller::searchBackward(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator BranchIt,
     const TargetInstrInfo *TII) const {
-  SmallSet<MCPhysReg, 8> BranchDefs, BranchUses;
-  collectRegs(*BranchIt, BranchDefs, BranchUses);
+  unsigned NumRegs = TRI->getNumRegs();
+  BitVector BranchDefs(NumRegs), BranchUses(NumRegs);
+  collectRegs(*BranchIt, TRI, BranchDefs, BranchUses);
 
-  SmallSet<MCPhysReg, 8> DefsAfter, UsesAfter;
+  BitVector DefsAfter(NumRegs), UsesAfter(NumRegs);
+  BitVector CandDefs(NumRegs), CandUses(NumRegs);
 
   if (BranchIt == MBB.begin())
     return false;
@@ -279,8 +290,9 @@ bool MicroBlazeDelaySlotFiller::searchBackward(
         MI.isInlineAsm() || MI.isPseudo())
       return false;
 
-    SmallSet<MCPhysReg, 8> CandDefs, CandUses;
-    collectRegs(MI, CandDefs, CandUses);
+    CandDefs.reset();
+    CandUses.reset();
+    collectRegs(MI, TRI, CandDefs, CandUses);
 
     if (overlaps(CandDefs, DefsAfter))  goto next;
     if (overlaps(CandDefs, UsesAfter))  goto next;
@@ -296,8 +308,8 @@ bool MicroBlazeDelaySlotFiller::searchBackward(
     }
 
   next:
-    for (MCPhysReg R : CandDefs) DefsAfter.insert(R);
-    for (MCPhysReg R : CandUses) UsesAfter.insert(R);
+    DefsAfter |= CandDefs;
+    UsesAfter |= CandUses;
   }
   return false;
 }
@@ -320,7 +332,7 @@ MicroBlazeDelaySlotFiller::selectSuccBB(MachineBasicBlock &MBB) const {
 
 bool MicroBlazeDelaySlotFiller::examinePred(MachineBasicBlock &Pred,
                                              const MachineBasicBlock &Succ,
-                                             SmallSet<MCPhysReg, 8> &BannedDefs,
+                                             BitVector &BannedDefs,
                                              bool &HasMultipleSuccs,
                                              BB2BrMap &BrMap) const {
   // Walk backward through Pred's terminators looking for a branch to Succ.
@@ -353,10 +365,14 @@ bool MicroBlazeDelaySlotFiller::examinePred(MachineBasicBlock &Pred,
     // registers live-in to OtherSucc.  Mirrors MIPS: addLiveOut only for Cond.
     if (BrMI->isConditionalBranch()) {
       HasMultipleSuccs = true;
-      for (const MachineBasicBlock *S : Pred.successors())
-        if (S != &Succ)
-          for (const auto &LI : S->liveins())
-            BannedDefs.insert(MCPhysReg(LI.PhysReg));
+      for (const MachineBasicBlock *S : Pred.successors()) {
+        if (S == &Succ)
+          continue;
+        for (const auto &LI : S->liveins())
+          for (MCRegAliasIterator AI(LI.PhysReg, TRI, /*IncludeSelf=*/true);
+               AI.isValid(); ++AI)
+            BannedDefs.set(*AI);
+      }
     }
   } else {
     // Fall-through case (push_back).  Only proceed if Pred has no terminal
@@ -382,9 +398,11 @@ bool MicroBlazeDelaySlotFiller::searchSuccBBs(
   if (!SuccBB)
     return false;
 
+  unsigned NumRegs = TRI->getNumRegs();
+
   // BannedDefs: registers the filler must not define — live-in to non-Succ
   // paths that would also execute the delay slot clone.
-  SmallSet<MCPhysReg, 8> BannedDefs;
+  BitVector BannedDefs(NumRegs);
   bool HasMultipleSuccs = false;
   BB2BrMap BrMap;
 
@@ -393,13 +411,13 @@ bool MicroBlazeDelaySlotFiller::searchSuccBBs(
       return false;
 
   // Also ban registers written by the branch itself (e.g. R15 for bralid).
-  SmallSet<MCPhysReg, 8> BranchDefs, BranchUses;
-  collectRegs(*Slot, BranchDefs, BranchUses);
-  for (MCPhysReg R : BranchDefs)
-    BannedDefs.insert(R);
+  BitVector BranchDefs(NumRegs), BranchUses(NumRegs);
+  collectRegs(*Slot, TRI, BranchDefs, BranchUses);
+  BannedDefs |= BranchDefs;
 
   // Scan SuccBB forward for the first instruction safe to hoist.
-  SmallSet<MCPhysReg, 8> DefsAfter, UsesAfter;
+  BitVector DefsAfter(NumRegs), UsesAfter(NumRegs);
+  BitVector CandDefs(NumRegs), CandUses(NumRegs);
   for (auto I = SuccBB->begin(); I != SuccBB->end(); ++I) {
     MachineInstr &MI = *I;
     if (MI.isDebugInstr())
@@ -411,8 +429,9 @@ bool MicroBlazeDelaySlotFiller::searchSuccBBs(
         MI.isInlineAsm() || MI.isPseudo())
       break;
 
-    SmallSet<MCPhysReg, 8> CandDefs, CandUses;
-    collectRegs(MI, CandDefs, CandUses);
+    CandDefs.reset();
+    CandUses.reset();
+    collectRegs(MI, TRI, CandDefs, CandUses);
 
     bool Safe = !overlaps(CandDefs, BannedDefs) &&
                 !overlaps(CandDefs, DefsAfter)  &&
@@ -427,8 +446,8 @@ bool MicroBlazeDelaySlotFiller::searchSuccBBs(
       return true;
     }
 
-    for (MCPhysReg R : CandDefs) DefsAfter.insert(R);
-    for (MCPhysReg R : CandUses) UsesAfter.insert(R);
+    DefsAfter |= CandDefs;
+    UsesAfter |= CandUses;
   }
   return false;
 }
