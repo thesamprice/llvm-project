@@ -66,10 +66,14 @@ def BRALD : MBA<0x26, 0, (outs), (ins GPR:$rD, GPR:$rB),
 def : Pat<(MBCall GPR:$callee), (BRALD R15, GPR:$callee)>;
 
 // BRK rD, rB — software break; enters break handler; rD ← PC+4  (rA=0b01100).
+// Control transfers to the break handler and never returns to the next
+// instruction, so isBarrier=1.  hasSideEffects=1: modifies BTR and MSR.BIP.
 def BRK   : MBA<0x26, 0, (outs), (ins GPR:$rD, GPR:$rB),
                 "brk\t$rD, $rB", []> {
   let rA = 0b01100;
   let isTerminator = 1;
+  let isBarrier = 1;
+  let hasSideEffects = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -128,10 +132,13 @@ def BRLID : MBB<0x2E, (outs), (ins GPR:$rD, brtarget:$imm),
 }
 
 // BRKI rD, imm — break to immediate; rD ← PC+4  (rA=0b01100).
+// Same semantics as BRK: transfers to break handler, never falls through.
 def BRKI  : MBB<0x2E, (outs), (ins GPR:$rD, calltarget:$imm),
                 "brki\t$rD, $imm", []> {
   let rA = 0b01100;
   let isTerminator = 1;
+  let isBarrier = 1;
+  let hasSideEffects = 1;
 }
 
 //===----------------------------------------------------------------------===//

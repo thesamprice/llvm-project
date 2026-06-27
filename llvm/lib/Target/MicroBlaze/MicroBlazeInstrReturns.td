@@ -18,6 +18,11 @@
 // 0b10100  rted — exception
 //===----------------------------------------------------------------------===//
 
+// RTID/RTBD/RTED restore processor state from special registers (MSR, BTR,
+// EAR, ESR…) that are not modeled as physical registers.  hasSideEffects=1
+// captures those implicit state changes.
+let hasSideEffects = 1 in {
+
 // RTID Ra, imm — return from interrupt; resumes at Ra + sext(imm).
 def RTID : MBB<0x2D, (outs), (ins GPR:$rA, simm16:$imm),
                "rtid\t$rA, $imm", []> {
@@ -38,6 +43,8 @@ def RTED : MBB<0x2D, (outs), (ins GPR:$rA, simm16:$imm),
   let rD = 0b10100;
   let isReturn = 1; let isTerminator = 1; let isBarrier = 1; let hasDelaySlot = 1;
 }
+
+} // let hasSideEffects = 1
 
 // MBAR imm — memory barrier; imm selects barrier type  (opcode 0x2E, rD=0b00010).
 // UG984 §5: imm[0]=sync data side, imm[1]=sync instruction side.

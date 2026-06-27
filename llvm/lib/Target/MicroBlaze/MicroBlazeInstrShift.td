@@ -19,23 +19,25 @@
 //   SEXT16 0x061 = 0b00001100001 — sign-extend halfword (bits[15:0] → bits[31:0])
 //===----------------------------------------------------------------------===//
 
+// SRA/SRC/SRL all read or write MSR.C (the carry bit), which is not modeled
+// as a physical register.  hasSideEffects=1 prevents passes from treating
+// these as pure register→register operations.
+let hasSideEffects = 1, rB = 0 in {
+
 // SRA Rd, Ra — Rd = sra(Ra, 1); MSR.C = Ra[0]  (opcode 0x24, func 0x001).
 def SRA_   : MBA<0x24, 0x001, (outs GPR:$rD), (ins GPR:$rA),
-                 "sra\t$rD, $rA", []> {
-  let rB = 0;
-}
+                 "sra\t$rD, $rA", []>;
 
 // SRC Rd, Ra — Rd = (MSR.C << 31) | (Ra >> 1); MSR.C = Ra[0]  (func 0x021).
+// Reads MSR.C as carry-in AND writes MSR.C = Ra[0].
 def SRC_   : MBA<0x24, 0x021, (outs GPR:$rD), (ins GPR:$rA),
-                 "src\t$rD, $rA", []> {
-  let rB = 0;
-}
+                 "src\t$rD, $rA", []>;
 
 // SRL Rd, Ra — Rd = Ra >> 1; MSR.C = Ra[0]  (func 0x041).
 def SRL_   : MBA<0x24, 0x041, (outs GPR:$rD), (ins GPR:$rA),
-                 "srl\t$rD, $rA", []> {
-  let rB = 0;
-}
+                 "srl\t$rD, $rA", []>;
+
+} // let hasSideEffects = 1, rB = 0
 
 // SelectionDAG patterns for single-bit shifts.
 // SRL covers srl-by-1, SRA covers sra-by-1.  Multi-bit shifts on base
