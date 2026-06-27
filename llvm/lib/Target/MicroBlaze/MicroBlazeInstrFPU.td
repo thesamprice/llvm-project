@@ -11,7 +11,7 @@
 // UG984 §5 Figs 83-89. C_USE_FPU=1 (Basic) or 2 (Extended). Latency varies.
 //   fadd  rD, rA, rB — func=0x000  (4/6/1 cycles area opt 0/1/2)
 //   frsub rD, rA, rB — func=0x080  (4/6/1 cycles)
-//   fmul  rD, rA, rB — func=0x100  (3/5/1 cycles)
+//   fmul  rD, rA, rB — func=0x100  (4/6/1 cycles)
 //   fdiv  rD, rA, rB — func=0x180  (30/32/29 cycles)
 //   fcmp  rD, rA, rB — func=0x200 | (OpSel << 4); OpSel in bits[6:4]
 //     fcmp.un OpSel=0b000 → func=0x200
