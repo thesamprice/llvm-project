@@ -14,25 +14,34 @@
 
 // ADDK Rd, Ra, Rb — add, no carry (opcode=0x04, K=1 C=0). UG984 Fig 59.
 def ADDK  : MBA<0x04, 0, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                "addk\t$rD, $rA, $rB", []>;
+                "addk\t$rD, $rA, $rB", []> {
+  let isCommutable = 1;
+}
 
 // RSUBK Rd, Ra, Rb — Rd = Rb - Ra, no carry (opcode=0x05). UG984 Ch.5.
+// Not commutable: operand order determines which operand is subtracted.
 def RSUBK : MBA<0x05, 0, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
                 "rsubk\t$rD, $rA, $rB", []>;
 
-// AND, OR, XOR, ANDN (opcodes 0x21, 0x20, 0x22, 0x23). UG984 Ch.5 (and=100001, or=100000, xor=100010, andn=100011).
+// AND, OR, XOR — commutable binary operations.
+// ANDN (Ra & ~Rb) — not commutable; negation applies to Rb only.
+let isCommutable = 1 in {
 def AND_  : MBA<0x21, 0, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
                 "and\t$rD, $rA, $rB", []>;
 def OR_   : MBA<0x20, 0, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
                 "or\t$rD, $rA, $rB", []>;
 def XOR_  : MBA<0x22, 0, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
                 "xor\t$rD, $rA, $rB", []>;
+} // let isCommutable = 1
+
 def ANDN  : MBA<0x23, 0, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
                 "andn\t$rD, $rA, $rB", []>;
 
 // MUL Rd, Ra, Rb (opcode=0x10) — 3-cycle latency (pipelined multiplier, C_AREA_OPTIMIZED=0)
 def MUL_  : MBA<0x10, 0, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                "mul\t$rD, $rA, $rB", [], IIC_MUL>;
+                "mul\t$rD, $rA, $rB", [], IIC_MUL> {
+  let isCommutable = 1;
+}
 
 //===----------------------------------------------------------------------===//
 // ALU — register/immediate (Type B)
@@ -79,10 +88,12 @@ let Predicates = [HasBarrelShiftPred] in {
 //===----------------------------------------------------------------------===//
 
 let Predicates = [HasMultiplyHighPred] in {
+  // MULH/MULHU are commutable: signed/unsigned high multiply is symmetric.
+  // MULHSU (signed×unsigned) is not: operand types differ.
   def MULH   : MBA<0x10, 0b00000000001, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                   "mulh\t$rD, $rA, $rB", [], IIC_MUL>;
+                   "mulh\t$rD, $rA, $rB", [], IIC_MUL> { let isCommutable = 1; }
   def MULHU  : MBA<0x10, 0b00000000011, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                   "mulhu\t$rD, $rA, $rB", [], IIC_MUL>;
+                   "mulhu\t$rD, $rA, $rB", [], IIC_MUL> { let isCommutable = 1; }
   def MULHSU : MBA<0x10, 0b00000000010, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
                    "mulhsu\t$rD, $rA, $rB", [], IIC_MUL>;
 }
@@ -94,6 +105,7 @@ let Predicates = [HasMultiplyHighPred] in {
 
 // cmp/cmpu share opcode 0x05 with rsubk; func[0]=1 enables compare,
 // func[1]=1 selects unsigned. UG984 Ch.5.
+// Not commutable: bit31 of result encodes signed(rA > rB), operand order matters.
 let Predicates = [HasPatternComparePred] in {
   def CMP  : MBA<0x05, 0b00000000001, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
                  "cmp\t$rD, $rA, $rB", []>;
@@ -127,9 +139,13 @@ def : Pat<(i32 simm16_pat:$imm), (ADDIK R0, imm:$imm)>;
 // LI32 accepts any i32 immediate; it is expanded to ADDIK in MCInstLower.
 // The MCCodeEmitter automatically prepends an IMM prefix when the value
 // does not fit in a signed 16-bit field (UG984 §5.2).
+// isReMaterializable: re-emitting the constant is always cheaper than
+// spilling and reloading it from the stack.
 def LI32 : MBPseudo<(outs GPR:$rD), (ins i32imm:$imm),
                      "#LI32 $rD, $imm",
-                     [(set i32:$rD, imm:$imm)]>;
+                     [(set i32:$rD, imm:$imm)]> {
+  let isReMaterializable = 1;
+}
 
 // Barrel-shift
 let Predicates = [HasBarrelShiftPred] in {
