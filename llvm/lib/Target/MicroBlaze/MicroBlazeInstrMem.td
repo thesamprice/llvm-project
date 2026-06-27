@@ -6,6 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+// mayLoad/mayStore must be set explicitly on each group: MachineInstr::mayLoad()
+// and mayStore() only check the MCInstrDesc flag; they do not fall back to
+// MachineMemOperands. Our patterns are defined separately via Pat<>, so
+// TableGen cannot infer these flags from the instruction definition alone.
 
 //===----------------------------------------------------------------------===//
 // Load instructions — immediate offset (Type B)
@@ -14,6 +18,8 @@
 // Load instructions use a combined memri/memrr address operand so that the
 // ADDRri/ADDRrr ComplexPatterns can match them directly.
 // The 21-bit addr field encodes [20:16]=base register and [15:0]=imm offset.
+
+let mayLoad = 1, hasSideEffects = 0 in {
 
 // LWI  Rd, Ra, imm — load word     (opcode=0x3A)
 def LWI  : MBB<0x3A, (outs GPR:$rD), (ins memri:$addr),
@@ -67,9 +73,13 @@ def LBU  : MBA<0x30, 0, (outs GPR:$rD), (ins memrr:$addr),
   let rB = addr{4-0};
 }
 
+} // let mayLoad = 1, hasSideEffects = 0
+
 //===----------------------------------------------------------------------===//
 // Store instructions — immediate offset (Type B)
 //===----------------------------------------------------------------------===//
+
+let mayStore = 1, hasSideEffects = 0 in {
 
 // SWI Rd, Ra, imm — store word  (opcode=0x3E)
 def SWI : MBB<0x3E, (outs), (ins GPR:$rD, memri:$addr),
@@ -122,6 +132,8 @@ def SB : MBA<0x34, 0, (outs), (ins GPR:$rD, memrr:$addr),
   let rA = addr{9-5};
   let rB = addr{4-0};
 }
+
+} // let mayStore = 1, hasSideEffects = 0
 
 //===----------------------------------------------------------------------===//
 // Memory SelectionDAG patterns
