@@ -43,11 +43,14 @@
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/PseudoSourceValue.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
@@ -181,6 +184,20 @@ static void collectRegs(const MachineInstr &MI,
   }
 }
 
+// Extract the fixed-stack frame index from a load/store's MachineMemOperand.
+// Returns true and sets FI if the instruction accesses a known frame slot.
+// Fixed stack slots are non-aliasing with each other by construction, so two
+// instructions with different FIs can always be safely reordered.
+static bool getFrameIndex(const MachineInstr &MI, int &FI) {
+  for (const MachineMemOperand *MMO : MI.memoperands())
+    if (const auto *PSV = dyn_cast_or_null<FixedStackPseudoSourceValue>(
+            MMO->getPseudoValue())) {
+      FI = PSV->getFrameIndex();
+      return true;
+    }
+  return false;
+}
+
 // True if any bit is set in both A and B.
 static bool overlaps(const BitVector &A, const BitVector &B) {
   for (unsigned I : A.set_bits())
@@ -275,6 +292,12 @@ bool MicroBlazeDelaySlotFiller::searchBackward(
   BitVector DefsAfter(NumRegs), UsesAfter(NumRegs);
   BitVector CandDefs(NumRegs), CandUses(NumRegs);
 
+  // Memory alias state for the backward scan.  We track which fixed stack
+  // frame indices have been stored to so that loads from other frame slots
+  // can still be hoisted past those stores.
+  SmallSet<int, 4> StoredFIs;
+  bool SeenNoObjStore = false; // store to unknown / non-frame address
+
   if (BranchIt == MBB.begin())
     return false;
 
@@ -286,20 +309,47 @@ bool MicroBlazeDelaySlotFiller::searchBackward(
     if (MI.isBranch() || MI.isCall() || MI.isReturn() || MI.hasDelaySlot())
       return false;
 
-    if (MI.mayStore() || MI.hasUnmodeledSideEffects() ||
-        MI.isInlineAsm() || MI.isPseudo())
+    if (MI.hasUnmodeledSideEffects() || MI.isInlineAsm() || MI.isPseudo())
       return false;
 
     CandDefs.reset();
     CandUses.reset();
     collectRegs(MI, TRI, CandDefs, CandUses);
 
+    // Stores cannot be candidates (side effects), but do not end the scan.
+    // Record the store's memory target so load candidates can be alias-checked.
+    if (MI.mayStore()) {
+      int FI;
+      if (getFrameIndex(MI, FI))
+        StoredFIs.insert(FI);
+      else
+        SeenNoObjStore = true;
+      goto next;
+    }
+
+    // Register hazard checks.
     if (overlaps(CandDefs, DefsAfter))  goto next;
     if (overlaps(CandDefs, UsesAfter))  goto next;
     if (overlaps(CandUses, DefsAfter))  goto next;
     if (overlaps(CandDefs, BranchDefs)) goto next;
     // Conservative backedge guard: do not define a register the branch reads.
     if (overlaps(CandDefs, BranchUses)) goto next;
+
+    // Memory alias check for loads: allow hoisting a frame-slot load past
+    // stores to *different* frame slots; block everything else conservatively.
+    if (MI.mayLoad()) {
+      int LoadFI;
+      if (!getFrameIndex(MI, LoadFI)) {
+        // Unknown address — block if any store has been seen.
+        if (SeenNoObjStore || !StoredFIs.empty())
+          goto next;
+      } else {
+        // Known frame slot — block only if that slot was stored to, or if an
+        // unknown store may have written to it.
+        if (SeenNoObjStore || StoredFIs.count(LoadFI))
+          goto next;
+      }
+    }
 
     {
       MBB.splice(std::next(BranchIt), &MBB, I);
