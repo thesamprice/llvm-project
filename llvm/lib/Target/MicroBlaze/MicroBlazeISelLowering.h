@@ -68,6 +68,18 @@ enum NodeType : unsigned {
   // Selected by MicroBlazeInstrPCmp.td patterns to PCMPEQ/PCMPNE machine insns.
   PCMPEQ,
   PCMPNE,
+  // Carry-chain nodes that thread MSR_C as an explicit i32 DAG value,
+  // mirroring ARM's ARMISD::ADDC/ADDE/SUBC/SUBE convention.
+  // MSR_C is the physical carry register; it never allocates to a GPR.
+  //
+  // (result: i32, carry: i32) = ADDC(a, b)   → ADD  machine instruction
+  // (result: i32, carry: i32) = ADDE(a, b, carry_in: i32) → ADDC machine instruction
+  // (result: i32, carry: i32) = SUBC(a, b)   → RSUB machine instruction
+  // (result: i32, carry: i32) = SUBE(a, b, carry_in: i32) → RSUBC machine instruction
+  ADDC,
+  ADDE,
+  SUBC,
+  SUBE,
 };
 } // namespace MicroBlazeISD
 
@@ -84,6 +96,13 @@ public:
   const char *getTargetNodeName(unsigned Opcode) const override;
 
   bool isIntDivCheap(EVT VT, AttributeList Attr) const override;
+
+  // Returns i32 for all scalar types so carry values stay as i32 through
+  // UADDO/UADDO_CARRY chains without needing truncate/zext nodes.
+  EVT getSetCCResultType(const DataLayout &DL, LLVMContext &Context,
+                         EVT VT) const override;
+
+  SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
 
   std::pair<unsigned, const TargetRegisterClass *>
   getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
@@ -127,6 +146,11 @@ private:
   SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFP32Load(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFP32Store(SDValue Op, SelectionDAG &DAG) const;
+
+  SDValue LowerUADDO(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerUSUBO(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerUADDO_CARRY(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerUSUBO_CARRY(SDValue Op, SelectionDAG &DAG) const;
 
   MachineBasicBlock *
   EmitInstrWithCustomInserter(MachineInstr &MI,

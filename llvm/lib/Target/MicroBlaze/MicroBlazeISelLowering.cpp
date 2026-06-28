@@ -61,6 +61,18 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   setMaxAtomicSizeInBitsSupported(32);
   setMinCmpXchgSizeInBits(32);
 
+  // Carry-chain operations for i64 arithmetic.  MSR_C is modeled as a
+  // physical carry register (like ARM's CPSR) so the carry flows directly
+  // between ADD/ADDC and RSUB/RSUBC without any GPR round-trip.
+  // UADDO/USUBO/UADDO_CARRY/USUBO_CARRY are Custom-lowered to
+  // MicroBlazeISD::ADDC/ADDE/SUBC/SUBE nodes that use MSR_C explicitly.
+  // The DAGCombine in PerformDAGCombine eliminates the boolean↔flags
+  // round-trip so the final output is always 2 instructions per 32-bit word.
+  setOperationAction(ISD::UADDO,       MVT::i32, Custom);
+  setOperationAction(ISD::USUBO,       MVT::i32, Custom);
+  setOperationAction(ISD::UADDO_CARRY, MVT::i32, Custom);
+  setOperationAction(ISD::USUBO_CARRY, MVT::i32, Custom);
+
   // Integer divide: use hardware IDIV/IDIVU when +divide is active; otherwise
   // fall through to __divsi3/__udivsi3 libcalls.  SREM/UREM always use
   // libcalls because the remainder is a destructive rA side-effect of IDIV
@@ -472,6 +484,10 @@ const char *MicroBlazeTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case MicroBlazeISD::SELECT_CC_FP:  return "MicroBlazeISD::SELECT_CC_FP";
   case MicroBlazeISD::PCMPEQ:        return "MicroBlazeISD::PCMPEQ";
   case MicroBlazeISD::PCMPNE:        return "MicroBlazeISD::PCMPNE";
+  case MicroBlazeISD::ADDC:         return "MicroBlazeISD::ADDC";
+  case MicroBlazeISD::ADDE:         return "MicroBlazeISD::ADDE";
+  case MicroBlazeISD::SUBC:         return "MicroBlazeISD::SUBC";
+  case MicroBlazeISD::SUBE:         return "MicroBlazeISD::SUBE";
   }
   return nullptr;
 }
@@ -497,6 +513,10 @@ SDValue MicroBlazeTargetLowering::LowerOperation(SDValue Op,
   case ISD::ATOMIC_FENCE:   return LowerATOMIC_FENCE(Op, DAG);
   case ISD::LOAD:           return LowerFP32Load(Op, DAG);
   case ISD::STORE:          return LowerFP32Store(Op, DAG);
+  case ISD::UADDO:          return LowerUADDO(Op, DAG);
+  case ISD::USUBO:          return LowerUSUBO(Op, DAG);
+  case ISD::UADDO_CARRY:    return LowerUADDO_CARRY(Op, DAG);
+  case ISD::USUBO_CARRY:    return LowerUSUBO_CARRY(Op, DAG);
   default:
     llvm_unreachable("Unexpected custom lowering");
   }
@@ -1347,4 +1367,167 @@ MicroBlazeTargetLowering::getRegForInlineAsmConstraint(
     }
   }
   return TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
+}
+
+//===----------------------------------------------------------------------===//
+// Carry-chain lowering (UADDO / USUBO / UADDO_CARRY / USUBO_CARRY)
+//
+// MicroBlaze uses MSR_C as a physical carry register.  The approach mirrors
+// ARM's ARMISD::ADDC/ADDE/SUBC/SUBE: the carry flows as an MVT::i32 DAG
+// value that maps to the physical MSR_C register, never passing through a GPR.
+//
+// valueToCarryFlag: convert boolean 0/1 carry into MSR_C flags value.
+//   SUBC(value, 1): value=0 → 0-1 underflows, MSR_C=0 (no carry)
+//                   value=1 → 1-1=0, MSR_C=1 (carry)
+//
+// carryFlagToValue: convert MSR_C flags value back to boolean 0/1.
+//   ADDE(0, 0, flags): carry=0 → 0+0+0=0; carry=1 → 0+0+1=1
+//
+// For subtraction the carry convention is inverted:
+//   LLVM USUBO_CARRY carry_in=1 means BORROW; MSR_C=1 means NO-BORROW.
+//   valueToCarryFlag(borrow, Invert=true):
+//     SUB(1, borrow) then SUBC(result, 1)
+//     borrow=0 → 1-0=1, SUBC(1,1)=0 → MSR_C=1 (no borrow) ✓
+//     borrow=1 → 1-1=0, SUBC(0,1) underflows → MSR_C=0 (borrow) ✓
+//   carryFlagToValue(flags, Invert=true) = SUB(1, ADDE(0,0,flags))
+//
+// Round-trip elimination (PerformDAGCombine):
+//   (SUBC (ADDE 0, 0, C), 1) → C
+// This fires when carry-in to UADDO_CARRY is produced by carryFlagToValue
+// from the preceding UADDO.  The generic DAGCombine SUB(A, SUB(A, B))→B
+// handles the double-inversion in the USUBO chain.
+//===----------------------------------------------------------------------===//
+
+EVT MicroBlazeTargetLowering::getSetCCResultType(const DataLayout &DL,
+                                                  LLVMContext &Context,
+                                                  EVT VT) const {
+  if (!VT.isVector())
+    return MVT::i32;
+  return VT.changeVectorElementTypeToInteger();
+}
+
+// Convert a boolean integer carry (0 or 1) into an MSR_C flags DAG value.
+// If Invert=true, the input is a borrow (1=borrow), which is the opposite of
+// MSR_C=1 (no-borrow), so we negate before constructing the flags.
+static SDValue valueToCarryFlag(SDValue Value, SelectionDAG &DAG, bool Invert) {
+  SDLoc DL(Value);
+  EVT VT = Value.getValueType();
+  if (Invert)
+    Value = DAG.getNode(ISD::SUB, DL, MVT::i32,
+                        DAG.getConstant(1, DL, MVT::i32), Value);
+  // SUBC(value, 1): sets MSR_C = (value >= 1) i.e. (value != 0).
+  SDValue Cmp = DAG.getNode(MicroBlazeISD::SUBC, DL,
+                            DAG.getVTList(VT, MVT::i32), Value,
+                            DAG.getConstant(1, DL, VT));
+  return Cmp.getValue(1);
+}
+
+// Convert an MSR_C flags DAG value back to a boolean integer carry (0 or 1).
+// If Invert=true, the caller wants a borrow (1=borrow) rather than a carry.
+static SDValue carryFlagToValue(SDValue Flags, EVT VT, SelectionDAG &DAG,
+                                bool Invert) {
+  SDLoc DL(Flags);
+  // ADDE(0, 0, flags): 0 + 0 + MSR_C = carry (0 or 1).
+  SDValue BoolCarry =
+      DAG.getNode(MicroBlazeISD::ADDE, DL, DAG.getVTList(VT, MVT::i32),
+                  DAG.getConstant(0, DL, VT), DAG.getConstant(0, DL, VT),
+                  Flags)
+          .getValue(0);
+  if (!Invert)
+    return BoolCarry;
+  // borrow = 1 - carry  (NOT the carry).
+  return DAG.getNode(ISD::SUB, DL, VT, DAG.getConstant(1, DL, VT), BoolCarry);
+}
+
+// UADDO: unsigned add-with-overflow for i32.
+//   (sum: i32, carry: i32) = UADDO(a, b)
+// Lowered to MicroBlazeISD::ADDC (→ ADD machine instruction) + carry extract.
+SDValue MicroBlazeTargetLowering::LowerUADDO(SDValue Op,
+                                              SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  EVT VT  = Op.getValue(0).getValueType();
+  EVT CVT = Op.getValue(1).getValueType();
+  SDValue Add = DAG.getNode(MicroBlazeISD::ADDC, DL,
+                            DAG.getVTList(VT, MVT::i32),
+                            Op.getOperand(0), Op.getOperand(1));
+  return DAG.getMergeValues({Add, carryFlagToValue(Add.getValue(1), CVT, DAG, false)}, DL);
+}
+
+// USUBO: unsigned sub-with-overflow for i32.
+//   (diff: i32, borrow: i32) = USUBO(a, b)
+// Lowered to MicroBlazeISD::SUBC (→ RSUB machine instruction) + borrow extract.
+SDValue MicroBlazeTargetLowering::LowerUSUBO(SDValue Op,
+                                              SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  EVT VT  = Op.getValue(0).getValueType();
+  EVT CVT = Op.getValue(1).getValueType();
+  // MBsubc(a, b) = RSUB(rA=b, rB=a) = a - b; MSR_C = 1 if no borrow.
+  SDValue Sub = DAG.getNode(MicroBlazeISD::SUBC, DL,
+                            DAG.getVTList(VT, MVT::i32),
+                            Op.getOperand(0), Op.getOperand(1));
+  // Invert=true: extract borrow (1=borrow) from MSR_C (1=no-borrow).
+  return DAG.getMergeValues({Sub, carryFlagToValue(Sub.getValue(1), CVT, DAG, true)}, DL);
+}
+
+// UADDO_CARRY: carry-in unsigned add for i32.
+//   (sum: i32, carry_out: i32) = UADDO_CARRY(a, b, carry_in: i32)
+// carry_in=1 means carry from the lo-word add.
+SDValue MicroBlazeTargetLowering::LowerUADDO_CARRY(SDValue Op,
+                                                    SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  EVT VT  = Op.getValue(0).getValueType();
+  EVT CVT = Op.getValue(1).getValueType();
+  SDValue CarryIn = valueToCarryFlag(Op.getOperand(2), DAG, false);
+  SDValue Add = DAG.getNode(MicroBlazeISD::ADDE, DL,
+                            DAG.getVTList(VT, MVT::i32),
+                            Op.getOperand(0), Op.getOperand(1), CarryIn);
+  return DAG.getMergeValues({Add, carryFlagToValue(Add.getValue(1), CVT, DAG, false)}, DL);
+}
+
+// USUBO_CARRY: borrow-in unsigned sub for i32.
+//   (diff: i32, borrow_out: i32) = USUBO_CARRY(a, b, borrow_in: i32)
+// borrow_in=1 means borrow from the lo-word sub (opposite of MSR_C convention).
+SDValue MicroBlazeTargetLowering::LowerUSUBO_CARRY(SDValue Op,
+                                                    SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  EVT VT  = Op.getValue(0).getValueType();
+  EVT CVT = Op.getValue(1).getValueType();
+  // Invert=true: borrow→MSR_C inversion (borrow=0 → MSR_C=1, borrow=1 → MSR_C=0).
+  SDValue CarryIn = valueToCarryFlag(Op.getOperand(2), DAG, true);
+  SDValue Sub = DAG.getNode(MicroBlazeISD::SUBE, DL,
+                            DAG.getVTList(VT, MVT::i32),
+                            Op.getOperand(0), Op.getOperand(1), CarryIn);
+  // Invert=true: MSR_C→borrow inversion on the way out.
+  return DAG.getMergeValues({Sub, carryFlagToValue(Sub.getValue(1), CVT, DAG, true)}, DL);
+}
+
+// PerformDAGCombine — carry round-trip elimination.
+//
+// When UADDO (lowered to MicroBlazeISD::ADDC) feeds UADDO_CARRY (lowered to
+// MicroBlazeISD::ADDE), the carry round-trip looks like:
+//   carryFlagToValue  : ADDE(0, 0, C)           → boolean carry
+//   valueToCarryFlag  : SUBC(ADDE(0,0,C), 1)    → flags
+//
+// The combine fires on MicroBlazeISD::SUBC when its LHS is ADDE(0,0,C):
+//   (SUBC (ADDE 0, 0, C), 1) → C   (directly return the original flags)
+//
+// After the combine, the carry chain collapses to:
+//   MicroBlazeISD::ADDC(lo_a, lo_b)         → (lo_sum, MSR_C)
+//   MicroBlazeISD::ADDE(hi_a, hi_b, MSR_C)  → (hi_sum, MSR_C)
+// which selects directly to ADD + ADDC (2 instructions).
+//
+// For the SUBE chain, the generic DAGCombiner's A-(A-B)→B fold reduces
+// the double-inversion 1-(1-x) to x before this combine fires.
+SDValue MicroBlazeTargetLowering::PerformDAGCombine(SDNode *N,
+                                                     DAGCombinerInfo &DCI) const {
+  if (N->getOpcode() == MicroBlazeISD::SUBC && N->hasAnyUseOfValue(1)) {
+    SDValue LHS = N->getOperand(0);
+    SDValue RHS = N->getOperand(1);
+    if (LHS->getOpcode() == MicroBlazeISD::ADDE &&
+        isNullConstant(LHS->getOperand(0)) &&
+        isNullConstant(LHS->getOperand(1)) &&
+        isOneConstant(RHS))
+      return DCI.CombineTo(N, SDValue(N, 0), LHS->getOperand(2));
+  }
+  return SDValue();
 }

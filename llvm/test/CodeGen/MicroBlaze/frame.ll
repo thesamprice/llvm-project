@@ -1,5 +1,6 @@
+; NOTE: Do not autogenerate
 ; RUN: llc -mtriple=microblazeel < %s | FileCheck %s
-
+; REQUIRES: microblaze-registered-target
 declare void @use(ptr)
 
 ; Leaf with alloca: SP adjusted, no r15 save needed.
@@ -22,8 +23,8 @@ define i32 @with_alloca(i32 %x) {
 ; CHECK: addik r1, r1, -8
 ; CHECK: swi r15, r1, 0
 ; CHECK: swi r5, r1, 4
-; CHECK: addik r5, r1, 4
 ; CHECK: bralid r15, use
+; CHECK-NEXT: addik r5, r1, 4
 ; CHECK: lwi r15, r1, 0
 ; CHECK: rtsd r15, 8
 ; CHECK: addik r1, r1, 8

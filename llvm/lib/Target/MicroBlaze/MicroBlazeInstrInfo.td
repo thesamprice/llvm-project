@@ -49,6 +49,36 @@ def SDT_MBSelectCC : SDTypeProfile<1, 4, [
 def MBSelectCC : SDNode<"MicroBlazeISD::SELECT_CC", SDT_MBSelectCC, []>;
 
 //===----------------------------------------------------------------------===//
+// Carry-chain DAG node type profiles (mirroring ARM's SDTBinaryArithWithFlags)
+//
+// MBFlagsVT is i32, representing MSR_C as a 32-bit DAG value.  The register
+// allocator maps these values to the physical MSR_C register.
+//===----------------------------------------------------------------------===//
+
+defvar MBFlagsVT = i32;
+
+// (result: T, carry: i32) = MBADDC(a: T, b: T)
+def SDTMBBinaryArithWithFlags : SDTypeProfile<2, 2, [
+    SDTCisSameAs<0, 2>, SDTCisSameAs<0, 3>, SDTCisInt<0>,
+    SDTCisVT<1, MBFlagsVT>]>;
+
+// (result: T, carry: i32) = MBADDE(a: T, b: T, carry_in: i32)
+def SDTMBBinaryArithWithFlagsInOut : SDTypeProfile<2, 3, [
+    SDTCisSameAs<0, 2>, SDTCisSameAs<0, 3>, SDTCisInt<0>,
+    SDTCisVT<1, MBFlagsVT>, SDTCisVT<4, MBFlagsVT>]>;
+
+// Carry-generating add: result = a + b, MSR_C = carry.  Maps to ADD.
+def MBaddc : SDNode<"MicroBlazeISD::ADDC", SDTMBBinaryArithWithFlags,
+                    [SDNPCommutative]>;
+// Carry-consuming sub: result = a - b, MSR_C = 1 if no borrow.  Maps to RSUB.
+def MBsubc : SDNode<"MicroBlazeISD::SUBC", SDTMBBinaryArithWithFlags>;
+// Carry-in/out add: result = a + b + MSR_C, MSR_C = carry.  Maps to ADDC.
+def MBadde : SDNode<"MicroBlazeISD::ADDE", SDTMBBinaryArithWithFlagsInOut,
+                    [SDNPCommutative]>;
+// Carry-in/out sub: result = a - b + MSR_C - 1, MSR_C = 1 if no borrow.  Maps to RSUBC.
+def MBsube : SDNode<"MicroBlazeISD::SUBE", SDTMBBinaryArithWithFlagsInOut>;
+
+//===----------------------------------------------------------------------===//
 // Immediate patterns and address-mode complex patterns
 //===----------------------------------------------------------------------===//
 

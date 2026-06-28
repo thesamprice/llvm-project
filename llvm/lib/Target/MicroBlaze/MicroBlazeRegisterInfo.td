@@ -105,3 +105,22 @@ def RFSL : RegisterClass<"MicroBlaze", [i32], 32, (add
   let Size = 32;
   let isAllocatable = 0;
 }
+
+//===----------------------------------------------------------------------===//
+// MSR.C — Machine Status Register carry bit (bit 29)
+//
+// Modeled as a virtual 32-bit register so the SelectionDAG can track carry
+// flow between ADD/ADDC/RSUB/RSUBC instructions without threading it through
+// a GPR.  The register is NOT allocatable; it only appears as an implicit
+// Def/Use on the four carry-arithmetic instructions, and as the explicit
+// third operand / second result in the MicroBlazeISD::ADDE/SUBE DAG nodes.
+//===----------------------------------------------------------------------===//
+
+def MSR_C : Register<"msr.c"> {
+  let Namespace = "MicroBlaze";
+  // No DWARF number — not visible to debuggers.
+}
+
+def MSRCRC : RegisterClass<"MicroBlaze", [i32], 32, (add MSR_C)> {
+  let isAllocatable = 0;
+}

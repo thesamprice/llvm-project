@@ -1,12 +1,14 @@
+; NOTE: Do not autogenerate
 ; RUN: llc -mtriple=microblazeel < %s | FileCheck %s
-
+; REQUIRES: microblaze-registered-target
 declare i32 @ext(i32, i32)
 
 ; Leaf function: no frame manipulation.
+; The delay slot filler hoists 'addk r3, r5, r6' into rtsd's delay slot.
 ; CHECK-LABEL: leaf:
 ; CHECK-NOT: addik r1
-; CHECK: addk r3, r5, r6
 ; CHECK: rtsd r15, 8
+; CHECK-NEXT: addk r3, r5, r6
 define i32 @leaf(i32 %a, i32 %b) {
   %r = add i32 %a, %b
   ret i32 %r
