@@ -32,6 +32,10 @@ def HasPatternComparePred : Predicate<"Subtarget->hasPatternCompare()">,
     AssemblerPredicate<(all_of FeaturePatternCompare), "pattern-compare">;
 def HasDividePred : Predicate<"Subtarget->hasDivide()">,
     AssemblerPredicate<(all_of FeatureDivide), "divide">;
+def HasSwapBytePred : Predicate<"Subtarget->hasSwapByte()">,
+    AssemblerPredicate<(all_of FeatureSwapByte), "swapb">;
+def HasSwapHalfPred : Predicate<"Subtarget->hasSwapHalf()">,
+    AssemblerPredicate<(all_of FeatureSwapHalf), "swaph">;
 def HasReorderInstrPred : Predicate<"Subtarget->hasReorderInstr()">,
     AssemblerPredicate<(all_of FeatureReorderInstr), "reorder">;
 def HasHardFloatPred : Predicate<"Subtarget->hasHardFloat()">,

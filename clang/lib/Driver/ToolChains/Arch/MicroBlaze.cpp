@@ -19,7 +19,7 @@
 //   -mxl-soft-div           -divide
 //   -mxl-multiply-high      +multiply-high
 //   -mno-xl-multiply-high   -multiply-high
-//   -mxl-reorder            +reorder
+//   -mxl-reorder            +reorder  (implies +swapb, +swaph)
 //   -mno-xl-reorder         -reorder
 //   -mno-xl-soft-float      +hard-float  (C_USE_FPU=1; enables HW FPU)
 //   -mxl-soft-float         -hard-float  (C_USE_FPU=0; software emulation, default)

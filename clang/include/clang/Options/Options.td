@@ -7174,6 +7174,7 @@ def mxl_float_convert : Flag<["-"], "mxl-float-convert">,
 def mno_xl_float_convert : Flag<["-"], "mno-xl-float-convert">,
   Group<m_microblaze_Features_Group>,
   HelpText<"Disable hardware floating-point conversion instructions (default)">;
+
 } // let Flags = [TargetSpecific]
 
 // X86 feature flags

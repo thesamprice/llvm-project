@@ -24,8 +24,21 @@ def FeaturePatternCompare : SubtargetFeature<"pattern-compare", "HasPatternCompa
 def FeatureDivide : SubtargetFeature<"divide", "HasDivide",
     "true", "Enable hardware integer divide instructions (idiv, idivu)">;
 
+// FeatureSwapByte: enables the SWAPB instruction (swap bytes within each halfword).
+// FeatureSwapHalf: enables the SWAPH instruction (swap two 16-bit halfwords).
+//   SWAPH implies SWAPB so both are usable together for 2-instruction bswap32.
+// Both require C_USE_REORDER_INSTR=1 on the hardware.
+// FeatureReorderInstr remains the combined user-facing flag (implies both).
+def FeatureSwapByte : SubtargetFeature<"swapb", "HasSwapByte",
+    "true", "Enable byte-within-halfword swap instruction (swapb)">;
+
+def FeatureSwapHalf : SubtargetFeature<"swaph", "HasSwapHalf",
+    "true", "Enable halfword-swap instruction (swaph); implies swapb",
+    [FeatureSwapByte]>;
+
 def FeatureReorderInstr : SubtargetFeature<"reorder", "HasReorderInstr",
-    "true", "Enable byte/halfword reorder instructions (swapb, swaph)">;
+    "true", "Enable byte/halfword reorder instructions (swapb, swaph)",
+    [FeatureSwapByte, FeatureSwapHalf]>;
 
 def FeatureHardFloat : SubtargetFeature<"hard-float", "HasHardFloat",
     "true", "Enable hardware floating-point instructions">;

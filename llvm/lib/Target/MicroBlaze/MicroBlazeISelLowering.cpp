@@ -83,9 +83,17 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   setLibcallImpl(RTLIB::UREM_I32, RTLIB::impl___umodsi3);
   setLibcallImpl(RTLIB::MUL_I32,  RTLIB::impl___mulsi3);
 
-  // Memory intrinsics: getMemcpy/getMemset/getMemmove pass the impl enum to
-  // getExternalSymbol; if the impl is Unsupported, getLibcallImplName returns
-  // a null StringRef which propagates as a null symbol and crashes in LowerCall.
+  // Memory intrinsics: inline small copies as load/store sequences.
+  // The default threshold (4 stores = 16 bytes) is too low for idiomatic C
+  // struct copies (e.g. dhrystone's 48-byte Rec_Type).  Raise to 16 stores
+  // (64 bytes) so LLVM inlines these the same way GCC does at -O2.
+  // Copies larger than 64 bytes still fall through to a memcpy libcall.
+  MaxStoresPerMemcpy = 16;
+  MaxStoresPerMemcpyOptSize = 8;
+  MaxStoresPerMemset = 16;
+  MaxStoresPerMemsetOptSize = 8;
+  MaxStoresPerMemmove = 16;
+  MaxStoresPerMemmoveOptSize = 8;
   setLibcallImpl(RTLIB::MEMCPY,  RTLIB::impl_memcpy);
   setLibcallImpl(RTLIB::MEMMOVE, RTLIB::impl_memmove);
   setLibcallImpl(RTLIB::MEMSET,  RTLIB::impl_memset);
@@ -399,9 +407,14 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   setOperationAction(ISD::CTTZ,  MVT::i32, Expand);
   setOperationAction(ISD::CTPOP, MVT::i32, Expand);
 
-  // With +reorder: SWAPB+SWAPH = 2-instruction bswap32. Without: expand to shifts.
-  setOperationAction(ISD::BSWAP, MVT::i32,
-                     STI.hasReorderInstr() ? Legal : Expand);
+  // bswap32 lowering: SWAPB is a full 32-bit byte reversal (ABCD→DCBA), so it
+  // implements bswap32 in a single instruction.  Legal with tablegen pattern
+  // whenever +swapb is available (+reorder implies +swapb).
+  // Without +swapb: Expand → shift/or sequence.
+  if (STI.hasSwapByte())
+    setOperationAction(ISD::BSWAP, MVT::i32, Legal);
+  else
+    setOperationAction(ISD::BSWAP, MVT::i32, Expand);
   setOperationAction(ISD::ROTL,      MVT::i32, Expand);
   setOperationAction(ISD::ROTR,      MVT::i32, Expand);
   setOperationAction(ISD::BITREVERSE, MVT::i32, Expand);
@@ -895,6 +908,7 @@ Value *MicroBlazeTargetLowering::emitStoreConditional(IRBuilderBase &Builder,
       /*hasSideEffects=*/true);
   return Builder.CreateCall(IA, {Val, Addr});
 }
+
 
 SDValue MicroBlazeTargetLowering::LowerShift(SDValue Op,
                                               SelectionDAG &DAG) const {

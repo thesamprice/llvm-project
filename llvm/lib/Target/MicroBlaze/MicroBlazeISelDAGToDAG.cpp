@@ -60,16 +60,21 @@ bool MicroBlazeDAGToDAGISel::SelectADDRri(SDValue Addr, SDValue &Base,
   }
 
   if (Addr.getOpcode() == ISD::ADD) {
-    if (auto *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1))) {
+    SDValue Op0 = Addr.getOperand(0);
+    SDValue Op1 = Addr.getOperand(1);
+    if (auto *CN = dyn_cast<ConstantSDNode>(Op1)) {
       int64_t Imm = CN->getSExtValue();
       if (isInt<16>(Imm)) {
-        Base   = Addr.getOperand(0);
+        Base   = Op0;
         if (auto *FIN = dyn_cast<FrameIndexSDNode>(Base))
           Base = CurDAG->getTargetFrameIndex(FIN->getIndex(), PtrVT);
         Offset = CurDAG->getTargetConstant(Imm, DL, PtrVT);
         return true;
       }
     }
+    // Non-const or out-of-range ADD operand: yield to ADDRrr → lw rd, ra, rb.
+    if (!isa<FrameIndexSDNode>(Op0) && !isa<FrameIndexSDNode>(Op1))
+      return false;
   }
 
   Base   = Addr;

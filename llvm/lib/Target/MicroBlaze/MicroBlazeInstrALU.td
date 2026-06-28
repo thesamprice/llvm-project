@@ -124,6 +124,8 @@ def : Pat<(and i32:$ra, i32:$rb), (AND_  GPR:$ra, GPR:$rb)>;
 def : Pat<(or  i32:$ra, i32:$rb), (OR_   GPR:$ra, GPR:$rb)>;
 def : Pat<(xor i32:$ra, i32:$rb), (XOR_  GPR:$ra, GPR:$rb)>;
 def : Pat<(mul i32:$ra, i32:$rb), (MUL_  GPR:$ra, GPR:$rb)>;
+// ANDN: (a & ~b) — saves the xori+and sequence the generic combiner emits.
+def : Pat<(and i32:$ra, (not i32:$rb)), (ANDN GPR:$ra, GPR:$rb)>;
 
 // ALU reg/simm16
 def : Pat<(add i32:$ra, simm16_pat:$imm), (ADDIK  GPR:$ra, imm:$imm)>;
