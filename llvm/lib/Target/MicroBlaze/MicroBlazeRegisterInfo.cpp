@@ -57,6 +57,10 @@ MicroBlazeRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   Reserved.set(MicroBlaze::R17);
   // R18 — assembler temporary, reserved by ABI.
   Reserved.set(MicroBlaze::R18);
+  // R20 — GOT base pointer in PIC mode; reserved unconditionally (per GCC).
+  Reserved.set(MicroBlaze::R20);
+  // R21 — reserved by GCC alongside R20 for PIC/SDA anchoring.
+  Reserved.set(MicroBlaze::R21);
 
   // R19 is the frame pointer; only reserved when actually in use.
   if (MF.getSubtarget<MicroBlazeSubtarget>().getFrameLowering()->hasFP(MF))

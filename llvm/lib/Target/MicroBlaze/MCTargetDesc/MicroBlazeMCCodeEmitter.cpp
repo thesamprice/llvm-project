@@ -20,6 +20,7 @@
 
 #include "MicroBlazeFixupKinds.h"
 #include "MCTargetDesc/MicroBlazeMCTargetDesc.h"
+#include "llvm/BinaryFormat/ELF.h"
 #include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
@@ -166,8 +167,21 @@ void MicroBlazeMCCodeEmitter::emitIMMPrefix(
   if (Expr) {
     // Symbolic operand: emit a relocation on the IMM word covering both the
     // IMM instruction and the following instruction (the 64-bit pair).
-    MicroBlaze::Fixups FKind = IsPCRel ? MicroBlaze::FIXUP_MICROBLAZE_64_PCREL
-                                        : MicroBlaze::FIXUP_MICROBLAZE_64;
+    // Check for PIC specifier expressions (GOT, PLT) first.
+    MicroBlaze::Fixups FKind;
+    if (const auto *SE = dyn_cast<MCSpecifierExpr>(Expr)) {
+      unsigned Spec = SE->getSpecifier();
+      if (Spec == ELF::R_MICROBLAZE_GOT_64)
+        FKind = MicroBlaze::FIXUP_MICROBLAZE_GOT_64;
+      else if (Spec == ELF::R_MICROBLAZE_PLT_64)
+        FKind = MicroBlaze::FIXUP_MICROBLAZE_PLT_64;
+      else
+        FKind = IsPCRel ? MicroBlaze::FIXUP_MICROBLAZE_64_PCREL
+                        : MicroBlaze::FIXUP_MICROBLAZE_64;
+    } else {
+      FKind = IsPCRel ? MicroBlaze::FIXUP_MICROBLAZE_64_PCREL
+                      : MicroBlaze::FIXUP_MICROBLAZE_64;
+    }
     Fixups.push_back(MCFixup::create(CurSize, Expr, MCFixupKind(FKind)));
   } else {
     // Large compile-time constant: encode the high 16 bits in the IMM word.

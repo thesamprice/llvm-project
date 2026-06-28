@@ -35,6 +35,14 @@ enum Fixups {
   // Applied at the IMM instruction; linker patches both words.
   FIXUP_MICROBLAZE_64_PCREL,
 
+  // R_MICROBLAZE_GOT_64 — two-instruction GOT-relative (IMM + lwi r20 pair).
+  // Applied at the IMM instruction; linker fills in GOT entry offset.
+  FIXUP_MICROBLAZE_GOT_64,
+
+  // R_MICROBLAZE_PLT_64 — two-instruction PLT-relative (IMM + branch pair).
+  // Applied at the IMM instruction; linker creates/patches PLT stub.
+  FIXUP_MICROBLAZE_PLT_64,
+
   // Marker.
   LastTargetFixupKind,
   NumTargetFixupKinds = LastTargetFixupKind - FirstTargetFixupKind

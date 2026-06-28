@@ -7,6 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "MicroBlazeMCAsmInfo.h"
+#include "llvm/BinaryFormat/ELF.h"
+#include "llvm/MC/MCExpr.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
 
@@ -23,4 +26,23 @@ MicroBlazeMCAsmInfo::MicroBlazeMCAsmInfo(const Triple & /*TheTriple*/,
   SupportsDebugInformation = true;
   // All MicroBlaze instructions are 32-bit.
   MinInstAlignment = 4;
+}
+
+void MicroBlazeMCAsmInfo::printSpecifierExpr(raw_ostream &OS,
+                                             const MCSpecifierExpr &Expr) const {
+  printExpr(OS, *Expr.getSubExpr());
+  switch (Expr.getSpecifier()) {
+  case ELF::R_MICROBLAZE_GOT_64:
+    OS << "@got";
+    break;
+  case ELF::R_MICROBLAZE_PLT_64:
+    OS << "@plt";
+    break;
+  case ELF::R_MICROBLAZE_GOTPC_64:
+    OS << "@gotpc";
+    break;
+  default:
+    OS << "@<unknown:" << Expr.getSpecifier() << ">";
+    break;
+  }
 }

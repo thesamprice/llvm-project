@@ -46,4 +46,14 @@ void MicroBlazeTargetInfo::getTargetDefines(const LangOptions &Opts,
     Builder.defineMacro("__MICROBLAZEEL__");
   else
     Builder.defineMacro("__MICROBLAZEEB__");
+
+  // PIC-level macros (consistent with other targets).
+  if (Opts.PICLevel > 0) {
+    Builder.defineMacro("__pic__");
+    Builder.defineMacro("__PIC__");
+    if (Opts.PIE) {
+      Builder.defineMacro("__pie__");
+      Builder.defineMacro("__PIE__");
+    }
+  }
 }

@@ -48,6 +48,10 @@ unsigned MicroBlazeELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_MICROBLAZE_64;
   case MicroBlaze::FIXUP_MICROBLAZE_64_PCREL:
     return ELF::R_MICROBLAZE_64_PCREL;
+  case MicroBlaze::FIXUP_MICROBLAZE_GOT_64:
+    return ELF::R_MICROBLAZE_GOT_64;
+  case MicroBlaze::FIXUP_MICROBLAZE_PLT_64:
+    return ELF::R_MICROBLAZE_PLT_64;
   case FK_Data_4:
     return IsPCRel ? ELF::R_MICROBLAZE_32_PCREL : ELF::R_MICROBLAZE_32;
   case FK_Data_8:
