@@ -12,6 +12,7 @@
 #include "MicroBlazeMachineFunctionInfo.h"
 #include "MicroBlazeSubtarget.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/CodeGen/CodeGenTargetMachineImpl.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include <memory>
@@ -42,6 +43,8 @@ public:
   }
 
   TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
+
+  TargetTransformInfo getTargetTransformInfo(const Function &F) const override;
 
   MachineFunctionInfo *
   createMachineFunctionInfo(BumpPtrAllocator &Allocator, const Function &F,
