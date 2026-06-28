@@ -124,13 +124,17 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   }
 
   // MUL is always available; high-word variants need +multiply-high.
-  if (!STI.hasMultiplyHigh()) {
+  // With +multiply-high, mark MULHS/MULHU Legal so the DAGCombiner's
+  // divide-by-constant strength reduction can emit multiply-by-magic sequences
+  // (idiv is 34 cycles; mulh is 3 cycles — always prefer magic for constants).
+  // Without +multiply-high, Expand all high-multiply ops so constant division
+  // falls through to __divsi3/__modsi3 libcalls.
+  if (STI.hasMultiplyHigh()) {
+    setOperationAction(ISD::MULHS, MVT::i32, Legal);
+    setOperationAction(ISD::MULHU, MVT::i32, Legal);
+  } else {
     setOperationAction(ISD::MULHS,     MVT::i32, Expand);
     setOperationAction(ISD::MULHU,     MVT::i32, Expand);
-    // SMUL_LOHI/UMUL_LOHI default to Legal, which causes DAGCombiner to
-    // strength-reduce constant divisions into multiply-high sequences that
-    // MicroBlaze cannot select.  Mark them Expand so __divsi3/__modsi3
-    // libcalls are used for all divisions.
     setOperationAction(ISD::SMUL_LOHI, MVT::i32, Expand);
     setOperationAction(ISD::UMUL_LOHI, MVT::i32, Expand);
   }
@@ -443,10 +447,12 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
 
 bool MicroBlazeTargetLowering::isIntDivCheap(EVT VT,
                                               AttributeList Attr) const {
-  // With +divide, IDIV/IDIVU are 34-cycle blocking instructions — cheaper
-  // than a __divsi3 libcall.  Without +divide, division is a libcall and
-  // strength-reduction to multiply-high sequences is preferable.
-  return Subtarget.hasDivide();
+  // Always false: IDIV is a 34-cycle blocking instruction; multiply-by-magic
+  // sequences using MULH are ~3 cycles.  Returning false lets the DAGCombiner
+  // strength-reduce constant divisors when +multiply-high is available.
+  // For variable divisors the combiner can't precompute the magic number, so
+  // SDIV/UDIV remain and get selected to IDIV/IDIVU.
+  return false;
 }
 
 const char *MicroBlazeTargetLowering::getTargetNodeName(unsigned Opcode) const {
