@@ -14,8 +14,8 @@
 
 let Predicates = [HasDividePred] in {
   def IDIV  : MBA<0x12, 0x000, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                  "idiv\t$rD, $rA, $rB", []> { let hasSideEffects = 1; }
+                  "idiv\t$rD, $rA, $rB", [], IIC_DIV> { let hasSideEffects = 1; }
   def IDIVU : MBA<0x12, 0x002, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                  "idivu\t$rD, $rA, $rB", []> { let hasSideEffects = 1; }
+                  "idivu\t$rD, $rA, $rB", [], IIC_DIV> { let hasSideEffects = 1; }
 }
 

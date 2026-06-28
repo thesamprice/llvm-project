@@ -45,6 +45,7 @@ def FeatureFSL : SubtargetFeature<"fsl", "HasFSL",
 
 include "MicroBlazeRegisterInfo.td"
 include "MicroBlazeCallingConv.td"
+include "MicroBlazeSchedule.td"
 include "MicroBlazeInstrInfo.td"
 
 def MicroBlazeInstrInfo : InstrInfo;
@@ -59,8 +60,8 @@ defm : RemapAllTargetPseudoPointerOperands<GPR>;
 
 // generic: matches the default hardware configuration shipped by AMD/Xilinx,
 // which includes the pattern-compare unit (cmp/cmpu) in all standard builds.
-def : ProcessorModel<"generic", NoSchedModel, [FeaturePatternCompare]>;
-def : ProcessorModel<"v11.0", NoSchedModel,
+def : ProcessorModel<"generic", MicroBlazeSchedModel, [FeaturePatternCompare]>;
+def : ProcessorModel<"v11.0", MicroBlazeSchedModel,
     [FeatureBarrelShift, FeatureMultiplyHigh, FeaturePatternCompare]>;
 
 def MicroBlazeInstPrinter : AsmWriter {
