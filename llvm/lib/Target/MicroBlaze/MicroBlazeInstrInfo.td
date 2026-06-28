@@ -148,3 +148,34 @@ include "MicroBlazeInstrCache.td"
 include "MicroBlazeInstrFPU.td"
 include "MicroBlazeInstrFSL.td"
 
+//===----------------------------------------------------------------------===//
+// Assembler aliases (no new opcodes — expand to existing instructions)
+//===----------------------------------------------------------------------===//
+
+// All aliases below are parse-only (Emit=0): the printer always uses the
+// canonical mnemonic, matching GNU as / objdump behavior.
+
+// la Rd, Ra, imm  →  addik Rd, Ra, imm  (load address)
+def : InstAlias<"la\t$rD, $rA, $imm", (ADDIK GPR:$rD, GPR:$rA, simm16:$imm), 0>;
+
+// neg Rd, Ra  →  rsubk Rd, Ra, r0  (negate: Rd = 0 - Ra)
+def : InstAlias<"neg\t$rD, $rA", (RSUBK GPR:$rD, GPR:$rA, R0), 0>;
+
+// not Rd, Ra  →  xori Rd, Ra, -1  (bitwise NOT)
+def : InstAlias<"not\t$rD, $rA", (XORI_ GPR:$rD, GPR:$rA, -1), 0>;
+
+// sub Rd, Ra, Rb  →  rsubk Rd, Rb, Ra  (note Ra/Rb swap: rsubk Rd,rA,rB = rB - rA)
+def : InstAlias<"sub\t$rD, $rA, $rB", (RSUBK GPR:$rD, GPR:$rB, GPR:$rA), 0>;
+
+// rtb Ra  →  rtbd Ra, 4  (return from trap break; jumps to Ra + 4)
+def : InstAlias<"rtb\t$rA", (RTBD GPR:$rA, 4), 0>;
+
+// tuqula Rd  →  addik Rd, r0, 42  (answers the ultimate question)
+def : InstAlias<"tuqula\t$rD", (ADDIK GPR:$rD, R0, 42), 0>;
+
+// Power management aliases (expand to mbar with specific immediate)
+// hibernate → mbar 8;  sleep → mbar 16;  suspend → mbar 24
+def : InstAlias<"hibernate", (MBAR 8), 0>;
+def : InstAlias<"sleep",     (MBAR 16), 0>;
+def : InstAlias<"suspend",   (MBAR 24), 0>;
+
