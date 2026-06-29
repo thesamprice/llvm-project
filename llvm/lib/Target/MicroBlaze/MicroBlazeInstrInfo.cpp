@@ -10,6 +10,7 @@
 #include "MCTargetDesc/MicroBlazeMCTargetDesc.h"
 #include "MicroBlazeSubtarget.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/Support/MathExtras.h"
 
 #define GET_INSTRINFO_CTOR_DTOR
 #include "MicroBlazeGenInstrInfo.inc"
@@ -219,4 +220,67 @@ unsigned MicroBlazeInstrInfo::insertBranch(MachineBasicBlock &MBB,
       *BytesAdded += 4;
   }
   return Count;
+}
+
+bool MicroBlazeInstrInfo::isBranchOffsetInRange(unsigned /*BranchOpc*/,
+                                                  int64_t BrOffset) const {
+  return isInt<16>(BrOffset);
+}
+
+MachineBasicBlock *
+MicroBlazeInstrInfo::getBranchDestBlock(const MachineInstr &MI) const {
+  // Unconditional branches (BRI/BRID): MBB is operand 0.
+  // Conditional branches (BEQIDx/BRIx): GPR is operand 0, MBB is operand 1.
+  if (isUncondBranchOpcode(MI.getOpcode()))
+    return MI.getOperand(0).getMBB();
+  return MI.getOperand(1).getMBB();
+}
+
+void MicroBlazeInstrInfo::insertIndirectBranch(
+    MachineBasicBlock &MBB, MachineBasicBlock &DestBB,
+    MachineBasicBlock & /*RestoreBB*/, const DebugLoc &DL,
+    int64_t /*BrOffset*/, RegScavenger * /*RS*/) const {
+  // IMM+BRID provides a 32-bit PC-relative range; no scratch register needed.
+  // The MCCodeEmitter automatically prepends an IMM prefix for far MBB targets.
+  // Emit only the BRID barrier here: the delay-slot filler runs after
+  // BranchRelaxationPass and bundles a filler (NOP if nothing else) into the
+  // slot.  Emitting an explicit, un-bundled NOP would leave a non-terminator
+  // after the BRID terminator, which -verify-machineinstrs rejects in the
+  // window between relaxation and the filler.  getInstSizeInBytes already
+  // accounts for the slot (8 bytes for a delay-slot branch), so omitting the
+  // NOP does not perturb branch-relaxation's size bookkeeping.
+  BuildMI(&MBB, DL, get(MicroBlaze::BRID)).addMBB(&DestBB);
+}
+
+bool MicroBlazeInstrInfo::isLoadInstruction(const MachineInstr &MI) const {
+  return MI.mayLoad() && !MI.mayStore();
+}
+
+bool MicroBlazeInstrInfo::isSafeInLoadDelaySlot(const MachineInstr &Filler,
+                                                 const MachineInstr &Load) const {
+  assert(isLoadInstruction(Load) && "Load must be a load instruction");
+  // MicroBlaze 2-cycle load-to-use latency (IIC_LD=2 in MicroBlazeSchedule.td):
+  //   Load at pipeline stage N → result available at N+2.
+  // In the DSF context, the branch occupies stage N+1 and the delay slot is
+  // at N+2.  The result is always ready when Filler reads it, so no stall
+  // occurs regardless of which registers Filler uses.
+  (void)Filler;
+  (void)Load;
+  return true;
+}
+
+unsigned MicroBlazeInstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
+  switch (MI.getOpcode()) {
+  case MicroBlaze::LI32:
+    return 8; // Always expands to IMM (4) + ADDIK (4).
+  default:
+    if (MI.isPseudo())
+      return 0;
+    // Account for the delay-slot instruction that DSF will append.
+    // This prevents BranchRelaxationPass from treating delay-slot branches
+    // as 4 bytes when their effective footprint is 8 (branch + filler).
+    if (MI.hasDelaySlot())
+      return 8;
+    return 4;
+  }
 }

@@ -394,6 +394,7 @@ bool MicroBlazeDelaySlotFiller::runOnMachineFunction(MachineFunction &MF) {
 bool MicroBlazeDelaySlotFiller::searchBackward(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator BranchIt,
     const TargetInstrInfo *TII) const {
+  const auto *MBII = static_cast<const MicroBlazeInstrInfo *>(TII);
   unsigned NumRegs = TRI->getNumRegs();
   BitVector BranchDefs(NumRegs), BranchUses(NumRegs);
   collectRegs(*BranchIt, TRI, BranchDefs, BranchUses);
@@ -486,6 +487,17 @@ bool MicroBlazeDelaySlotFiller::searchBackward(
           goto next;
       }
     }
+
+    // Explicit load-use hazard check (UG984 §2, IIC_LD=2 in Schedule.td).
+    // For each load instruction already scanned between this candidate and the
+    // branch, isSafeInLoadDelaySlot verifies the candidate can safely fill the
+    // delay slot.  The branch occupies one pipeline stage between load and
+    // delay slot, satisfying the 2-cycle latency requirement — so this check
+    // always passes for MicroBlaze.  It exists to document the invariant in a
+    // form that can be independently tested and relaxed if needed.
+    for (auto J = std::next(I); J != BranchIt; ++J)
+      if (MBII->isLoadInstruction(*J) && !MBII->isSafeInLoadDelaySlot(MI, *J))
+        goto next;
 
     {
       MBB.splice(std::next(BranchIt), &MBB, I);
@@ -739,10 +751,13 @@ bool MicroBlazeDelaySlotFiller::searchJoinBB(
   // unused (e.g. the pointer register in an ABS negation block running RSUBK).
   BitVector BannedDefs(NumRegs);
   BitVector InterDefs(NumRegs);
+  bool InterHasStore = false;
   for (MachineBasicBlock *Other : MBB.successors()) {
     if (Other == JoinBB)
       continue;
     for (const MachineInstr &MI : *Other) {
+      if (MI.mayStore())
+        InterHasStore = true;
       for (const MachineOperand &MO : MI.operands()) {
         if (!MO.isReg() || !MO.getReg().isPhysical())
           continue;
@@ -809,7 +824,8 @@ bool MicroBlazeDelaySlotFiller::searchJoinBB(
                 !overlaps(CandDefs, BranchGuardUses)  &&
                 !overlaps(CandDefs, DefsAfter)         &&
                 !overlaps(CandDefs, UsesAfter)         &&
-                !overlaps(CandUses, DefsAfter);
+                !overlaps(CandUses, DefsAfter)         &&
+                !(MI.mayLoad() && InterHasStore);          // memory RAW: interm. store may alias
 
     if (Safe) {
       // MOVE MI from JoinBB into the delay slot.  No clone is needed because

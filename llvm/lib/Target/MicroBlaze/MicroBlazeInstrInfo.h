@@ -62,6 +62,29 @@ public:
                         ArrayRef<MachineOperand> Cond,
                         const DebugLoc &DL,
                         int *BytesAdded = nullptr) const override;
+
+  bool isBranchOffsetInRange(unsigned BranchOpc,
+                              int64_t BrOffset) const override;
+
+  MachineBasicBlock *getBranchDestBlock(const MachineInstr &MI) const override;
+
+  void insertIndirectBranch(MachineBasicBlock &MBB, MachineBasicBlock &DestBB,
+                             MachineBasicBlock &RestoreBB, const DebugLoc &DL,
+                             int64_t BrOffset = 0,
+                             RegScavenger *RS = nullptr) const override;
+
+  unsigned getInstSizeInBytes(const MachineInstr &MI) const override;
+
+  // Returns true if MI is a pure load (excludes atomic read-modify-write).
+  bool isLoadInstruction(const MachineInstr &MI) const;
+
+  // Returns true if Filler can safely execute in the branch delay slot
+  // immediately following Load without incurring a load-use pipeline stall.
+  // MicroBlaze has a 2-cycle load-to-use latency (IIC_LD=2): when the branch
+  // occupies the stage between Load and the delay slot, the result is ready
+  // by the time Filler reads it — so all fillers are safe.
+  bool isSafeInLoadDelaySlot(const MachineInstr &Filler,
+                              const MachineInstr &Load) const;
 };
 
 } // namespace llvm

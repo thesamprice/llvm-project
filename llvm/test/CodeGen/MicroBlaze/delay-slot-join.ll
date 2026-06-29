@@ -64,6 +64,32 @@ join:
   ret i32 %z
 }
 
+; ── Negative (memory RAW): join loads from a stack slot an intermediate block stores ─
+; if (c) mem[sp+k] = new_val; result = mem[sp+k] + 7.
+; The join's load reads the slot that the then-block writes.  Hoisting the load
+; into the delay slot would read the PRE-store value on the taken path, so
+; searchJoinBB must refuse (InterHasStore guard): branch stays non-delayed.
+; The backend lays out then before join here, so the branch fires for the
+; join path (c>0): blti (fires when r3<0, i.e., c>0) not bltid.
+;
+; CHECK-LABEL: tri_mem_raw:
+; CHECK:      blti r3, .LBB
+; CHECK-NOT:  bltid
+define i32 @tri_mem_raw(i32 %c, i32 %new_val) {
+entry:
+  %slot = alloca i32, align 4
+  store i32 42, ptr %slot
+  %cond = icmp sgt i32 %c, 0
+  br i1 %cond, label %join, label %then
+then:
+  store i32 %new_val, ptr %slot
+  br label %join
+join:
+  %v = load i32, ptr %slot
+  %z = add i32 %v, 7
+  ret i32 %z
+}
+
 ; ── Negative (extra predecessor): join is reachable from outside the diamond ─
 ; %join has a third predecessor (%other) that does not run the branch's delay
 ; slot, so moving the join instruction would skip it on that path.  Again the

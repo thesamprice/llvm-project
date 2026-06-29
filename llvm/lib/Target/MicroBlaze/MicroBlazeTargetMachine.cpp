@@ -85,6 +85,9 @@ public:
   }
 
   void addPreEmitPass() override {
+    // Expand out-of-range branches before the delay slot filler so that DSF
+    // can fill the stub block's delay slots on the second pass.
+    addPass(&BranchRelaxationPassID);
     addPass(createMicroBlazeDelaySlotFiller());
   }
 };
