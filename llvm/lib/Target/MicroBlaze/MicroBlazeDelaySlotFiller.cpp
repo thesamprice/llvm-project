@@ -107,6 +107,9 @@
 #define GET_INSTRINFO_ENUM
 #include "MicroBlazeGenInstrInfo.inc"
 
+#define GET_REGINFO_ENUM
+#include "MicroBlazeGenRegisterInfo.inc"
+
 using namespace llvm;
 
 #define DEBUG_TYPE "microblaze-delay-slot-filler"
@@ -322,6 +325,113 @@ static void addLiveInRegs(MachineBasicBlock::iterator Filler,
 }
 
 // ---------------------------------------------------------------------------
+// Pre-increment sinking
+// ---------------------------------------------------------------------------
+
+// ISel copies the pointer register before advancing it so the old address
+// is still available for the subsequent load.  Two orderings appear in
+// practice depending on which direction the scan advances:
+//
+// Pattern A — advance-before-load (left scan, positive stride):
+//   addk  rA, rB, R0      -- rA = rB  (save old pointer)
+//   addik rB, rA, N       -- rB = rB + N  (advance; N > 0)
+//   lwi   rC, rA, OFF     -- rC = *(rB_old + OFF)  (load via saved pointer)
+//
+// Pattern B — load-before-advance (right scan, negative stride):
+//   addk  rA, rB, R0      -- rA = rB  (save old pointer)
+//   lwi   rC, rA, OFF     -- rC = *(rB_old + OFF)  (load via saved pointer)
+//   addik rB, rA, N       -- rB = rB + N  (advance; N < 0)
+//
+// Both patterns share the same fix: rA is unnecessary.  Load directly from
+// rB using the same offset, then advance rB.  The load address is unchanged
+// because rB still holds the old pointer at load time.
+//
+//   lwi   rC, rB, OFF     -- rC = *(rB_old + OFF)  same address
+//   addik rB, rB, N       -- rB = rB + N            same result
+//
+// Constraint: rC must not equal rB (otherwise lwi clobbers the base before
+// addik uses it).  In Pattern A, rC is often rA (≠ rB by construction).
+//
+// After sinking addik to immediately before the backward branch,
+// searchBackward moves it into the delay slot automatically.  The exit path
+// compensates for the unconditional execution of addik in the slot.
+static bool sinkPreIncrements(MachineBasicBlock &MBB) {
+  bool Changed = false;
+
+  for (auto I = MBB.begin(), E = MBB.end(); I != E;) {
+    // Match: addk rA, rB, R0
+    if (I->getOpcode() != MicroBlaze::ADDK) { ++I; continue; }
+    Register rA = I->getOperand(0).getReg();
+    Register rB = I->getOperand(1).getReg();
+    if (I->getOperand(2).getReg() != MicroBlaze::R0 || rA == rB) { ++I; continue; }
+
+    auto Addk = I++;
+    if (I == E) break;
+
+    MachineBasicBlock::iterator Addik, Lwi;
+    bool PatternA = false;
+
+    if (I->getOpcode() == MicroBlaze::ADDIK &&
+        I->getOperand(0).getReg() == rB &&
+        I->getOperand(1).getReg() == rA) {
+      // Pattern A: addik rB, rA, N follows the addk.
+      Addik = I++;
+      if (I == E) break;
+      if (I->getOpcode() != MicroBlaze::LWI ||
+          I->getOperand(1).getReg() != rA) { continue; }
+      Lwi = I++;
+      PatternA = true;
+    } else if (I->getOpcode() == MicroBlaze::LWI &&
+               I->getOperand(1).getReg() == rA) {
+      // Pattern B: lwi rC, rA, OFF follows the addk.
+      Lwi = I++;
+      if (I == E) break;
+      if (I->getOpcode() != MicroBlaze::ADDIK ||
+          I->getOperand(0).getReg() != rB ||
+          I->getOperand(1).getReg() != rA) { continue; }
+      Addik = I++;
+    } else {
+      continue;
+    }
+
+    // Safety: lwi destination must not alias rB (would clobber the pointer
+    // base before addik reads it in the lwi-before-addik order).
+    Register rC = Lwi->getOperand(0).getReg();
+    if (rC == rB) continue;
+
+    // Rewrite both instructions to use rB directly, eliminating rA.
+    Lwi->getOperand(1).setReg(rB);    // lwi rC, rA, OFF → lwi rC, rB, OFF
+    Addik->getOperand(1).setReg(rB);  // addik rB, rA, N → addik rB, rB, N
+
+    if (PatternA) {
+      // Reorder: move lwi to before addik.
+      MBB.splice(Addik, &MBB, Lwi);
+    }
+    // Pattern B order is already lwi → addik; no splice needed.
+
+    // Remove the now-redundant addk copy.
+    Addk->eraseFromParent();
+    // Block now: ... Lwi → Addik → I ...
+
+    // Sink addik past non-rB instructions until the first rB user/def or
+    // terminator, placing it immediately before the backward branch so that
+    // searchBackward can move it into the delay slot.
+    while (I != E && !I->isTerminator()) {
+      bool TouchesRB = llvm::any_of(I->operands(), [rB](const MachineOperand &MO) {
+        return MO.isReg() && MO.getReg() == rB;
+      });
+      if (TouchesRB) break;
+      ++I;
+    }
+    if (std::next(Addik) != I)
+      MBB.splice(I, &MBB, Addik);
+
+    Changed = true;
+  }
+  return Changed;
+}
+
+// ---------------------------------------------------------------------------
 // Pass implementation
 // ---------------------------------------------------------------------------
 
@@ -330,6 +440,11 @@ bool MicroBlazeDelaySlotFiller::runOnMachineFunction(MachineFunction &MF) {
   const TargetInstrInfo *TII =
       MF.getSubtarget<MicroBlazeSubtarget>().getInstrInfo();
   bool Changed = false;
+
+  // Sink loop pre-increments before delay-slot filling so searchBackward
+  // can move the increment into the branch delay slot.
+  for (MachineBasicBlock &MBB : MF)
+    Changed |= sinkPreIncrements(MBB);
 
   for (MachineBasicBlock &MBB : MF) {
     for (auto I = MBB.begin(); I != MBB.end(); ++I) {
