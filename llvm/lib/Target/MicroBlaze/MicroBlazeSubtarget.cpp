@@ -16,6 +16,26 @@
 
 using namespace llvm;
 
+// Scheduling-model selection is bound to the TuneCPU.  The Area pipeline
+// (C_AREA_OPTIMIZED=1) is requested feature-orthogonally via +area-optimized, so
+// map that feature to the internal "mb-area" tune-CPU (which carries
+// MicroBlazeAreaModel) before the base constructor picks the model.  The real CPU
+// and the rest of the -mattr set are unaffected.
+static bool hasAreaOptimizedFeature(StringRef FS) {
+  SmallVector<StringRef, 8> Features;
+  FS.split(Features, ',', /*MaxSplit=*/-1, /*KeepEmpty=*/false);
+  for (StringRef F : Features)
+    if (F == "+area-optimized")
+      return true;
+  return false;
+}
+
+static StringRef computeTuneCPU(StringRef CPU, StringRef FS) {
+  if (hasAreaOptimizedFeature(FS))
+    return "mb-area";
+  return CPU.empty() ? "generic" : CPU;
+}
+
 // Call ParseSubtargetFeatures before any member that queries feature bits
 // (TLInfo constructor reads hasBarrelShift() etc., so features must be set first).
 // Default to "generic" when no CPU is explicitly specified so that the features
@@ -25,14 +45,14 @@ static MicroBlazeSubtarget &
 initSubtargetDependencies(StringRef CPU, StringRef FS,
                           MicroBlazeSubtarget &STI) {
   StringRef EffectiveCPU = CPU.empty() ? "generic" : CPU;
-  STI.ParseSubtargetFeatures(EffectiveCPU, EffectiveCPU, FS);
+  STI.ParseSubtargetFeatures(EffectiveCPU, computeTuneCPU(CPU, FS), FS);
   return STI;
 }
 
 MicroBlazeSubtarget::MicroBlazeSubtarget(const Triple &TT, StringRef CPU,
                                          StringRef FS,
                                          const MicroBlazeTargetMachine &TM)
-    : MicroBlazeGenSubtargetInfo(TT, CPU, /*TuneCPU=*/CPU, FS),
+    : MicroBlazeGenSubtargetInfo(TT, CPU, computeTuneCPU(CPU, FS), FS),
       InstrInfo(initSubtargetDependencies(CPU, FS, *this)),
       FrameLowering(*this), TLInfo(TM, *this) {}
 

@@ -52,7 +52,7 @@ def HasFSLPred : Predicate<"Subtarget->hasFSL()">,
 //===----------------------------------------------------------------------===//
 
 class MBInst<dag outs, dag ins, string asmstr, list<dag> pattern,
-             InstrItinClass itin = NoItinerary>
+             list<SchedReadWrite> sched = []>
     : Instruction {
   field bits<32> Inst;
   field bits<32> SoftFail = 0;
@@ -63,7 +63,7 @@ class MBInst<dag outs, dag ins, string asmstr, list<dag> pattern,
   let InOperandList  = ins;
   let AsmString      = asmstr;
   let Pattern        = pattern;
-  let Itinerary      = itin;
+  let SchedRW        = sched;
 
   // Delay-slot annotation (set per-instruction below).
   bit hasDelaySlot = 0;
@@ -75,8 +75,8 @@ class MBInst<dag outs, dag ins, string asmstr, list<dag> pattern,
 
 class MBA<bits<6> op, bits<11> func,
           dag outs, dag ins, string asmstr, list<dag> pattern,
-          InstrItinClass itin = IIC_ALU>
-    : MBInst<outs, ins, asmstr, pattern, itin> {
+          list<SchedReadWrite> sched = [WriteALU]>
+    : MBInst<outs, ins, asmstr, pattern, sched> {
   bits<5> rD;
   bits<5> rA;
   bits<5> rB;
@@ -94,8 +94,8 @@ class MBA<bits<6> op, bits<11> func,
 
 class MBB<bits<6> op,
           dag outs, dag ins, string asmstr, list<dag> pattern,
-          InstrItinClass itin = IIC_ALU>
-    : MBInst<outs, ins, asmstr, pattern, itin> {
+          list<SchedReadWrite> sched = [WriteALU]>
+    : MBInst<outs, ins, asmstr, pattern, sched> {
   bits<5>  rD;
   bits<5>  rA;
   bits<16> imm;
@@ -123,8 +123,8 @@ class MBPseudo<dag outs, dag ins, string asmstr, list<dag> pattern>
 // S=1: shift left; T=1: arithmetic; not a Type B — imm prefix has no effect.
 //===----------------------------------------------------------------------===//
 class MBBSI<bit S, bit T, dag outs, dag ins, string asmstr, list<dag> pattern,
-            InstrItinClass itin = IIC_ALU>
-    : MBInst<outs, ins, asmstr, pattern, itin> {
+            list<SchedReadWrite> sched = [WriteALU]>
+    : MBInst<outs, ins, asmstr, pattern, sched> {
   bits<5> rD;
   bits<5> rA;
   bits<5> shamt;
@@ -146,8 +146,8 @@ class MBBSI<bit S, bit T, dag outs, dag ins, string asmstr, list<dag> pattern,
 // E=1: extract field; I=1: insert field; IMMW=end bit index, IMMS=shift amount.
 //===----------------------------------------------------------------------===//
 class MBBSF<bit I, bit E, dag outs, dag ins, string asmstr, list<dag> pattern,
-            InstrItinClass itin = IIC_ALU>
-    : MBInst<outs, ins, asmstr, pattern, itin> {
+            list<SchedReadWrite> sched = [WriteALU]>
+    : MBInst<outs, ins, asmstr, pattern, sched> {
   bits<5> rD;
   bits<5> rA;
   bits<5> immw;
@@ -171,8 +171,8 @@ class MBBSF<bit I, bit E, dag outs, dag ins, string asmstr, list<dag> pattern,
 //===----------------------------------------------------------------------===//
 
 class MBMFS<bit E, dag outs, dag ins, string asmstr, list<dag> pattern,
-            InstrItinClass itin = IIC_SPR>
-    : MBInst<outs, ins, asmstr, pattern, itin> {
+            list<SchedReadWrite> sched = [WriteSPR]>
+    : MBInst<outs, ins, asmstr, pattern, sched> {
   bits<5>  rD;
   bits<14> rs;
 
@@ -193,8 +193,8 @@ class MBMFS<bit E, dag outs, dag ins, string asmstr, list<dag> pattern,
 //===----------------------------------------------------------------------===//
 
 class MBMTS<bit E, dag outs, dag ins, string asmstr, list<dag> pattern,
-            InstrItinClass itin = IIC_SPR>
-    : MBInst<outs, ins, asmstr, pattern, itin> {
+            list<SchedReadWrite> sched = [WriteSPR]>
+    : MBInst<outs, ins, asmstr, pattern, sched> {
   bits<5>  rA;
   bits<14> rs;
 
@@ -215,8 +215,8 @@ class MBMTS<bit E, dag outs, dag ins, string asmstr, list<dag> pattern,
 //===----------------------------------------------------------------------===//
 
 class MBMSR<bit clr, dag outs, dag ins, string asmstr, list<dag> pattern,
-            InstrItinClass itin = IIC_SPR>
-    : MBInst<outs, ins, asmstr, pattern, itin> {
+            list<SchedReadWrite> sched = [WriteSPR]>
+    : MBInst<outs, ins, asmstr, pattern, sched> {
   bits<5>  rD;
   bits<15> imm;
 
@@ -251,7 +251,7 @@ class MBMSR<bit clr, dag outs, dag ins, string asmstr, list<dag> pattern,
 // MBFSLG — static FSL get: rD ← FSL_port[rfslN]
 //   Opcode 0x1B, P=0.  Port number in bits[7:4] as 4-bit immediate.
 class MBFSLG<bit N, bit C, bit T, bit A, bit E>
-    : MBInst<(outs GPR:$rD), (ins RFSL:$port), "", []> {
+    : MBInst<(outs GPR:$rD), (ins RFSL:$port), "", [], [WriteFSL]> {
   bits<5> rD;
   bits<4> port;
   let Inst{31-26} = 0x1B;
@@ -271,7 +271,7 @@ class MBFSLG<bit N, bit C, bit T, bit A, bit E>
 // MBFSLP — static FSL put: FSL_port[rfslN] ← rA
 //   Opcode 0x1B, P=1.  Port number in bits[7:4] as 4-bit immediate.
 class MBFSLP<bit N, bit C, bit T, bit A, bit E>
-    : MBInst<(outs), (ins GPR:$rA, RFSL:$port), "", []> {
+    : MBInst<(outs), (ins GPR:$rA, RFSL:$port), "", [], [WriteFSL]> {
   bits<5> rA;
   bits<4> port;
   let Inst{31-26} = 0x1B;
@@ -291,7 +291,7 @@ class MBFSLP<bit N, bit C, bit T, bit A, bit E>
 // MBFSLDG — dynamic FSL get: rD ← FSL_port[rB]
 //   Opcode 0x13, P=0.  Port number in GPR rB (bits[15:11]).
 class MBFSLDG<bit N, bit C, bit T, bit A, bit E>
-    : MBInst<(outs GPR:$rD), (ins GPR:$rB), "", []> {
+    : MBInst<(outs GPR:$rD), (ins GPR:$rB), "", [], [WriteFSL]> {
   bits<5> rD;
   bits<5> rB;
   let Inst{31-26} = 0x13;
@@ -310,7 +310,7 @@ class MBFSLDG<bit N, bit C, bit T, bit A, bit E>
 // MBFSLDP — dynamic FSL put: FSL_port[rB] ← rA
 //   Opcode 0x13, P=1.  Port number in GPR rB (bits[15:11]).
 class MBFSLDP<bit N, bit C, bit T, bit A, bit E>
-    : MBInst<(outs), (ins GPR:$rA, GPR:$rB), "", []> {
+    : MBInst<(outs), (ins GPR:$rA, GPR:$rB), "", [], [WriteFSL]> {
   bits<5> rA;
   bits<5> rB;
   let Inst{31-26} = 0x13;

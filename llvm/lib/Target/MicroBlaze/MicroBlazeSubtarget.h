@@ -40,6 +40,7 @@ class MicroBlazeSubtarget : public MicroBlazeGenSubtargetInfo {
   bool HasFloatConvert = false;
   bool HasExtendedAddr = false;
   bool HasFSL = false;
+  bool HasAreaOptimized = false;
 
   SelectionDAGTargetInfo TSI;
   MicroBlazeInstrInfo InstrInfo;
@@ -80,6 +81,7 @@ public:
   bool hasFloatConvert() const { return HasFloatConvert; }
   bool hasExtendedAddr() const { return HasExtendedAddr; }
   bool hasFSL() const { return HasFSL; }
+  bool hasAreaOptimized() const { return HasAreaOptimized; }
 
   void initLibcallLoweringInfo(LibcallLoweringInfo &Info) const override;
 };

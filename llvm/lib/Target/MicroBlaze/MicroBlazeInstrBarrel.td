@@ -29,11 +29,11 @@ def bsifi_width : Operand<i32>, ImmLeaf<i32, [{return Imm >= 1 && Imm <= 32;}]> 
 let Predicates = [HasBarrelShiftPred] in {
   // Immediate forms (opcode=0x19). Latency: 1 or 2 cycles.
   def BSRLI : MBBSI<0, 0, (outs GPR:$rD), (ins GPR:$rA, uimm5:$shamt),
-                    "bsrli\t$rD, $rA, $shamt", []>;
+                    "bsrli\t$rD, $rA, $shamt", [], [WriteBarrel]>;
   def BSRAI : MBBSI<0, 1, (outs GPR:$rD), (ins GPR:$rA, uimm5:$shamt),
-                    "bsrai\t$rD, $rA, $shamt", []>;
+                    "bsrai\t$rD, $rA, $shamt", [], [WriteBarrel]>;
   def BSLLI : MBBSI<1, 0, (outs GPR:$rD), (ins GPR:$rA, uimm5:$shamt),
-                    "bslli\t$rD, $rA, $shamt", []>;
+                    "bslli\t$rD, $rA, $shamt", [], [WriteBarrel]>;
 
 }
 
@@ -50,7 +50,7 @@ let Predicates = [HasBarrelShiftPred] in {
   // BSEFI: extract field of width (IMMW-IMMS+1) bits starting at bit IMMS.
   // BSIFI: insert field; IMMW = shift + width - 1 per assembler convention.
   def BSEFI : MBBSF<0, 1, (outs GPR:$rD), (ins GPR:$rA, uimm5:$immw, uimm5:$imms),
-                    "bsefi\t$rD, $rA, $immw, $imms", []>;
+                    "bsefi\t$rD, $rA, $immw, $imms", [], [WriteBarrel]>;
   def BSIFI : MBBSF<1, 0, (outs GPR:$rD), (ins GPR:$rA, bsifi_width:$immw, uimm5:$imms),
-                    "bsifi\t$rD, $rA, $immw, $imms", []>;
+                    "bsifi\t$rD, $rA, $immw, $imms", [], [WriteBarrel]>;
 }

@@ -52,6 +52,12 @@ def FeatureExtendedAddr : SubtargetFeature<"extended-addr", "HasExtendedAddr",
 def FeatureFSL : SubtargetFeature<"fsl", "HasFSL",
     "true", "Enable FSL/AXI-Stream stream interface instructions (get, put, getd, putd, and variants)">;
 
+// C_AREA_OPTIMIZED=1: the 3-stage area pipeline.  Selects MicroBlazeAreaModel for
+// scheduling (barrel-shift and multiply become multi-cycle); see
+// MicroBlazeSchedule.td and MicroBlazeSubtarget.cpp.
+def FeatureAreaOptimized : SubtargetFeature<"area-optimized", "HasAreaOptimized",
+    "true", "Schedule for the 3-stage area-optimized pipeline (C_AREA_OPTIMIZED=1)">;
+
 //===----------------------------------------------------------------------===//
 // Register file, Calling Conv, Instruction Descriptions (added in later commits)
 //===----------------------------------------------------------------------===//
@@ -73,10 +79,15 @@ defm : RemapAllTargetPseudoPointerOperands<GPR>;
 
 // generic: matches the default hardware configuration shipped by AMD/Xilinx,
 // which includes the pattern-compare unit (cmp/cmpu) in all standard builds.
-def : ProcessorModel<"generic", MicroBlazeSchedModel, [FeaturePatternCompare]>;
-def : ProcessorModel<"v11.0", MicroBlazeSchedModel,
+def : ProcessorModel<"generic", MicroBlazeSpeedModel, [FeaturePatternCompare]>;
+def : ProcessorModel<"v11.0", MicroBlazeSpeedModel,
     [FeatureBarrelShift, FeatureMultiplyHigh, FeaturePatternCompare,
      FeatureDivide]>;
+
+// Internal tune-CPU used only to select MicroBlazeAreaModel for scheduling when
+// the +area-optimized feature is requested (MicroBlazeSubtarget passes this as
+// the TuneCPU).  It is feature-orthogonal: the real CPU/-mattr set still applies.
+def : ProcessorModel<"mb-area", MicroBlazeAreaModel, []>;
 
 def MicroBlazeInstPrinter : AsmWriter {
   string AsmWriterClassName = "InstPrinter";

@@ -65,7 +65,7 @@ def : Pat<(MBIntrRet), (RTID R14, 0)>;
 // Per QEMU insns.decode line 186:
 //   mbar  101110 imm:5 00010 0000 0000 0000 0100
 class MBMBAR<dag outs, dag ins, string asmstr, list<dag> pattern>
-    : MBInst<outs, ins, asmstr, pattern, IIC_MBAR> {
+    : MBInst<outs, ins, asmstr, pattern, [WriteMBAR]> {
   bits<5> sel;
   let Inst{31-26} = 0x2E;
   let Inst{25-21} = sel;

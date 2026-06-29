@@ -10,6 +10,7 @@
 #include "MicroBlazeInstPrinter.h"
 #include "MicroBlazeMCAsmInfo.h"
 #include "TargetInfo/MicroBlazeTargetInfo.h"
+#include "llvm/MC/MCInstrAnalysis.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
@@ -46,7 +47,22 @@ createMicroBlazeMCSubtargetInfo(const Triple &TT, StringRef CPU, StringRef FS) {
   std::string CPUName = std::string(CPU);
   if (CPUName.empty())
     CPUName = "generic";
-  return createMicroBlazeMCSubtargetInfoImpl(TT, CPUName, CPUName, FS);
+  // The Area scheduling model (C_AREA_OPTIMIZED=1) is selected feature-
+  // orthogonally via +area-optimized, mapped to the "mb-area" tune-CPU.  This
+  // mirrors MicroBlazeSubtarget so MC-level tools (llvm-mca, llvm-mc) agree.
+  StringRef TuneCPU = CPUName;
+  SmallVector<StringRef, 8> Features;
+  FS.split(Features, ',', /*MaxSplit=*/-1, /*KeepEmpty=*/false);
+  for (StringRef F : Features)
+    if (F == "+area-optimized")
+      TuneCPU = "mb-area";
+  return createMicroBlazeMCSubtargetInfoImpl(TT, CPUName, TuneCPU, FS);
+}
+
+// Generic MCInstrAnalysis (uses the isCall/isReturn/isBranch flags from the .td)
+// — required by analysis tools such as llvm-mca, which dereference it.
+static MCInstrAnalysis *createMicroBlazeMCInstrAnalysis(const MCInstrInfo *Info) {
+  return new MCInstrAnalysis(Info);
 }
 
 static MCInstPrinter *createMicroBlazeMCInstPrinter(const Triple &T,
@@ -65,6 +81,7 @@ LLVMInitializeMicroBlazeTargetMC() {
   TargetRegistry::RegisterMCInstrInfo(T, createMicroBlazeMCInstrInfo);
   TargetRegistry::RegisterMCRegInfo(T, createMicroBlazeMCRegisterInfo);
   TargetRegistry::RegisterMCSubtargetInfo(T, createMicroBlazeMCSubtargetInfo);
+  TargetRegistry::RegisterMCInstrAnalysis(T, createMicroBlazeMCInstrAnalysis);
   TargetRegistry::RegisterMCInstPrinter(T, createMicroBlazeMCInstPrinter);
   TargetRegistry::RegisterMCCodeEmitter(T, createMicroBlazeMCCodeEmitter);
   TargetRegistry::RegisterMCAsmBackend(T, createMicroBlazeAsmBackend);

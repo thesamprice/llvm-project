@@ -34,36 +34,36 @@ let Predicates = [HasHardFloatPred],
     hasSideEffects = 0, mayRaiseFPException = 1 in {
   def FADD  : MBA<0x16, 0x000, (outs FPR:$rD), (ins FPR:$rA, FPR:$rB),
                   "fadd\t$rD, $rA, $rB",
-                  [(set FPR:$rD, (fadd FPR:$rA, FPR:$rB))], IIC_FPUAdd>;
+                  [(set FPR:$rD, (fadd FPR:$rA, FPR:$rB))], [WriteFPUAdd]>;
   // frsub rD, rA, rB computes rD = rB - rA (operands reversed vs. subtract).
   // The DAG pattern swaps the operands so (fsub $a, $b) → frsub $b, $a.
   def FRSUB : MBA<0x16, 0x080, (outs FPR:$rD), (ins FPR:$rA, FPR:$rB),
-                  "frsub\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+                  "frsub\t$rD, $rA, $rB", [], [WriteFPUAdd]>;
   def FMUL  : MBA<0x16, 0x100, (outs FPR:$rD), (ins FPR:$rA, FPR:$rB),
                   "fmul\t$rD, $rA, $rB",
-                  [(set FPR:$rD, (fmul FPR:$rA, FPR:$rB))], IIC_FPUMul>;
+                  [(set FPR:$rD, (fmul FPR:$rA, FPR:$rB))], [WriteFPUMul]>;
   def FDIV  : MBA<0x16, 0x180, (outs FPR:$rD), (ins FPR:$rA, FPR:$rB),
                   "fdiv\t$rD, $rA, $rB",
-                  [(set FPR:$rD, (fdiv FPR:$rA, FPR:$rB))], IIC_FPUDiv>;
+                  [(set FPR:$rD, (fdiv FPR:$rA, FPR:$rB))], [WriteFPUDiv]>;
 
   // fcmp variants write a float result (0.0 or 1.0) to a GPR.  They are
   // defined here for encoding completeness; SETCC lowering via hardware fcmp
   // is handled in MicroBlazeISelLowering (deferred — custom lowering needed
   // to convert the float 0/1 result into an i1 branch condition).
   def FCMP_UN : MBA<0x16, 0x200, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
-                    "fcmp.un\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+                    "fcmp.un\t$rD, $rA, $rB", [], [WriteFPUAdd]>;
   def FCMP_LT : MBA<0x16, 0x210, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
-                    "fcmp.lt\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+                    "fcmp.lt\t$rD, $rA, $rB", [], [WriteFPUAdd]>;
   def FCMP_EQ : MBA<0x16, 0x220, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
-                    "fcmp.eq\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+                    "fcmp.eq\t$rD, $rA, $rB", [], [WriteFPUAdd]>;
   def FCMP_LE : MBA<0x16, 0x230, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
-                    "fcmp.le\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+                    "fcmp.le\t$rD, $rA, $rB", [], [WriteFPUAdd]>;
   def FCMP_GT : MBA<0x16, 0x240, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
-                    "fcmp.gt\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+                    "fcmp.gt\t$rD, $rA, $rB", [], [WriteFPUAdd]>;
   def FCMP_NE : MBA<0x16, 0x250, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
-                    "fcmp.ne\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+                    "fcmp.ne\t$rD, $rA, $rB", [], [WriteFPUAdd]>;
   def FCMP_GE : MBA<0x16, 0x260, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
-                    "fcmp.ge\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+                    "fcmp.ge\t$rD, $rA, $rB", [], [WriteFPUAdd]>;
 }
 
 // fsub a, b → frsub b, a  (swap operands: frsub rD,rA,rB = rB - rA)
@@ -117,17 +117,17 @@ let Predicates = [HasFloatConvertPred],
     hasSideEffects = 0, mayRaiseFPException = 1 in {
   def FLT   : MBA<0x16, 0x280, (outs FPR:$rD), (ins GPR:$rA),
                   "flt\t$rD, $rA",
-                  [(set FPR:$rD, (sint_to_fp GPR:$rA))], IIC_FPUAdd> {
+                  [(set FPR:$rD, (sint_to_fp GPR:$rA))], [WriteFPUAdd]> {
     let rB = 0;
   }
   def FINT  : MBA<0x16, 0x300, (outs GPR:$rD), (ins FPR:$rA),
                   "fint\t$rD, $rA",
-                  [(set GPR:$rD, (fp_to_sint FPR:$rA))], IIC_FPUAdd> {
+                  [(set GPR:$rD, (fp_to_sint FPR:$rA))], [WriteFPUAdd]> {
     let rB = 0;
   }
   def FSQRT : MBA<0x16, 0x380, (outs FPR:$rD), (ins FPR:$rA),
                   "fsqrt\t$rD, $rA",
-                  [(set FPR:$rD, (fsqrt FPR:$rA))], IIC_FPUDiv> {
+                  [(set FPR:$rD, (fsqrt FPR:$rA))], [WriteFPUDiv]> {
     let rB = 0;
   }
 }

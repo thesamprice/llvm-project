@@ -196,7 +196,7 @@ include "MicroBlazeInstrFSL.td"
 // GOT-relative offset of the symbol's entry.
 let hasSideEffects = 0, mayLoad = 1, isReMaterializable = 1 in
 def LA_GOT : MBB<0x3A, (outs GPR:$rD), (ins i32imm:$offset),
-                  "la_got\t$rD, $offset", [], IIC_LD> {
+                  "la_got\t$rD, $offset", [], [WriteLd]> {
   bits<16> offset;
   let rA  = 20;      // R20 is the GOT base (hardcoded)
   let imm = offset;

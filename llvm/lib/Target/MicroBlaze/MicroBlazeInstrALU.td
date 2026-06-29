@@ -39,7 +39,7 @@ def ANDN  : MBA<0x23, 0, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
 
 // MUL Rd, Ra, Rb (opcode=0x10) — 3-cycle latency (pipelined multiplier, C_AREA_OPTIMIZED=0)
 def MUL_  : MBA<0x10, 0, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                "mul\t$rD, $rA, $rB", [], IIC_MUL> {
+                "mul\t$rD, $rA, $rB", [], [WriteMul]> {
   let isCommutable = 1;
 }
 
@@ -66,7 +66,7 @@ def XORI_  : MBB<0x2A, (outs GPR:$rD), (ins GPR:$rA, simm16:$imm),
 
 // MULI Rd, Ra, imm16 (opcode=0x18) — 3-cycle latency (same multiplier as MUL).
 def MULI_  : MBB<0x18, (outs GPR:$rD), (ins GPR:$rA, simm16:$imm),
-                 "muli\t$rD, $rA, $imm", [], IIC_MUL>;
+                 "muli\t$rD, $rA, $imm", [], [WriteMul]>;
 
 //===----------------------------------------------------------------------===//
 // Barrel-shift instructions (require +barrel-shift, opcode=0x11)
@@ -76,11 +76,11 @@ def MULI_  : MBB<0x18, (outs GPR:$rD), (ins GPR:$rA, simm16:$imm),
 
 let Predicates = [HasBarrelShiftPred] in {
   def BSRL : MBA<0x11, 0b00000000000, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                 "bsrl\t$rD, $rA, $rB", []>;
+                 "bsrl\t$rD, $rA, $rB", [], [WriteBarrel]>;
   def BSRA : MBA<0x11, 0b01000000000, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                 "bsra\t$rD, $rA, $rB", []>;
+                 "bsra\t$rD, $rA, $rB", [], [WriteBarrel]>;
   def BSLL : MBA<0x11, 0b10000000000, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                 "bsll\t$rD, $rA, $rB", []>;
+                 "bsll\t$rD, $rA, $rB", [], [WriteBarrel]>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -91,11 +91,11 @@ let Predicates = [HasMultiplyHighPred] in {
   // MULH/MULHU are commutable: signed/unsigned high multiply is symmetric.
   // MULHSU (signed×unsigned) is not: operand types differ.
   def MULH   : MBA<0x10, 0b00000000001, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                   "mulh\t$rD, $rA, $rB", [], IIC_MUL> { let isCommutable = 1; }
+                   "mulh\t$rD, $rA, $rB", [], [WriteMul]> { let isCommutable = 1; }
   def MULHU  : MBA<0x10, 0b00000000011, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                   "mulhu\t$rD, $rA, $rB", [], IIC_MUL> { let isCommutable = 1; }
+                   "mulhu\t$rD, $rA, $rB", [], [WriteMul]> { let isCommutable = 1; }
   def MULHSU : MBA<0x10, 0b00000000010, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                   "mulhsu\t$rD, $rA, $rB", [], IIC_MUL>;
+                   "mulhsu\t$rD, $rA, $rB", [], [WriteMul]>;
 }
 
 //===----------------------------------------------------------------------===//
