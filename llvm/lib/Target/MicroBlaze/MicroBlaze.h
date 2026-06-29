@@ -16,6 +16,7 @@ class MicroBlazeTargetMachine;
 class PassRegistry;
 
 FunctionPass *createMicroBlazeDelaySlotFiller();
+void initializeMicroBlazeDelaySlotFillerPass(PassRegistry &);
 
 } // namespace llvm
 

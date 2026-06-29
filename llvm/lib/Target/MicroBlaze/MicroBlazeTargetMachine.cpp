@@ -25,6 +25,10 @@ using namespace llvm;
 extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void
 LLVMInitializeMicroBlazeTarget() {
   RegisterTargetMachine<MicroBlazeTargetMachine> X(getTheMicroBlazeELTarget());
+
+  // Register passes so they are available to -run-pass / -start-before / etc.
+  PassRegistry &PR = *PassRegistry::getPassRegistry();
+  initializeMicroBlazeDelaySlotFillerPass(PR);
 }
 
 static Reloc::Model getEffectiveRelocModel(std::optional<Reloc::Model> RM) {

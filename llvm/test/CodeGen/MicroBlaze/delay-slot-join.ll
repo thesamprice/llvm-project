@@ -1,3 +1,4 @@
+; NOTE: Do not autogenerate
 ; RUN: llc -mtriple=microblazeel -verify-machineinstrs %s -o - | FileCheck %s
 ; REQUIRES: microblaze-registered-target
 
@@ -45,12 +46,13 @@ done:
 ; if (c) y = a*a; z = y + 7.  The join's "y + 7" reads y, which the then-block
 ; writes.  Moving it into the conditional branch's delay slot would read the
 ; stale y on the fall-through path, so searchJoinBB must refuse: the branch is
-; downgraded to the non-delayed form and is immediately followed by the
-; unconditional branch (NOT the dependent add).
+; downgraded to the non-delayed form (bgei, not bgeid).
+; cmp r3, %c, 0 sets bit31=1 when %c>0; bgei fires when r3>=0 (c<=0), routing
+; to the then block, falling through to join when c>0.
 ;
 ; CHECK-LABEL: tri_raw:
-; CHECK:      blti r3, .LBB
-; CHECK-NEXT: bri .LBB
+; CHECK:      bgei r3, .LBB
+; CHECK-NOT:  bgeid
 define i32 @tri_raw(i32 %c, i32 %a, i32 %y0) {
 entry:
   %cond = icmp sgt i32 %c, 0
@@ -92,12 +94,13 @@ join:
 
 ; ── Negative (extra predecessor): join is reachable from outside the diamond ─
 ; %join has a third predecessor (%other) that does not run the branch's delay
-; slot, so moving the join instruction would skip it on that path.  Again the
-; branch must stay non-delayed with bri following it.
+; slot, so moving the join instruction would skip it on that path.  The branch
+; must stay non-delayed (bgei, not bgeid); the backend may duplicate the join
+; block to eliminate the explicit bri.
 ;
 ; CHECK-LABEL: tri_extra_pred:
-; CHECK:      blti r3, .LBB
-; CHECK-NEXT: bri .LBB
+; CHECK:      bgei r3, .LBB
+; CHECK-NOT:  bgeid
 define i32 @tri_extra_pred(i32 %c, i32 %a, i32 %s, i32 %sel) {
 entry:
   %u = icmp eq i32 %sel, 0

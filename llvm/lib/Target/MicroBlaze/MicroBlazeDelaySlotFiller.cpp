@@ -102,6 +102,7 @@
 #include "llvm/CodeGen/PseudoSourceValue.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/InitializePasses.h"
 #include "llvm/MC/MCRegisterInfo.h"
 
 #define GET_INSTRINFO_ENUM
@@ -131,7 +132,9 @@ class MicroBlazeDelaySlotFiller : public MachineFunctionPass {
 public:
   static char ID;
 
-  MicroBlazeDelaySlotFiller() : MachineFunctionPass(ID) {}
+  MicroBlazeDelaySlotFiller() : MachineFunctionPass(ID) {
+    initializeMicroBlazeDelaySlotFillerPass(*PassRegistry::getPassRegistry());
+  }
 
   StringRef getPassName() const override {
     return "MicroBlaze delay slot filler";
@@ -189,6 +192,12 @@ private:
 } // namespace
 
 char MicroBlazeDelaySlotFiller::ID = 0;
+
+INITIALIZE_PASS_BEGIN(MicroBlazeDelaySlotFiller, DEBUG_TYPE,
+                      "MicroBlaze delay slot filler", false, false)
+INITIALIZE_PASS_DEPENDENCY(MachineBranchProbabilityInfoWrapperPass)
+INITIALIZE_PASS_END(MicroBlazeDelaySlotFiller, DEBUG_TYPE,
+                    "MicroBlaze delay slot filler", false, false)
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -325,6 +334,98 @@ static void addLiveInRegs(MachineBasicBlock::iterator Filler,
 }
 
 // ---------------------------------------------------------------------------
+// Copy-to-delay-slot hoisting
+// ---------------------------------------------------------------------------
+//
+// Recognises:
+//   addk  rX, rY, R0       -- rX = rY  (ISel register copy; rX != rY)
+//   [zero or more instructions that neither define rX nor define rY]
+//   <D-form conditional branch targeting a backward block>
+//
+// and transforms to:
+//   [intervening instructions — every USE of rX replaced by rY]
+//   <D-form branch, bundled with addk as its delay slot>
+//   addk  rX, rY, R0       -- [bundle body: executes as the delay slot]
+//
+// Correctness: the delay slot fires unconditionally (taken and fall-through
+// paths alike), so rX = rY before any successor block begins — identical to
+// the original semantics.  Any use of rX in an intermediate instruction is
+// equivalent to rY because rY is unmodified in the scan range.
+//
+// The DSF main loop skips pre-bundled branches via:
+//   if (I->isBundledWithSucc()) continue;
+static bool hoistCopyToDelaySlot(MachineBasicBlock &MBB) {
+  bool Changed = false;
+
+  for (auto I = MBB.begin(), E = MBB.end(); I != E;) {
+    // Match: addk rX, rY, R0
+    if (I->getOpcode() != MicroBlaze::ADDK) { ++I; continue; }
+    Register rX = I->getOperand(0).getReg();
+    Register rY = I->getOperand(1).getReg();
+    if (I->getOperand(2).getReg() != MicroBlaze::R0 || rX == rY) {
+      ++I; continue;
+    }
+
+    auto Addk = I++;
+    // I now points to the first instruction after Addk.
+
+    // Scan forward for a D-form backward branch.  Abort if rX or rY is
+    // redefined, or if a call/return is encountered.
+    MachineBasicBlock::iterator BranchIt = E;
+
+    for (auto J = I; J != E; ++J) {
+      // Abort if any instruction redefines rX or rY.
+      bool Abort = false;
+      for (const MachineOperand &MO : J->operands()) {
+        if (!MO.isReg() || !MO.isDef()) continue;
+        if (MO.getReg() == rX || MO.getReg() == rY) { Abort = true; break; }
+      }
+      if (Abort) break;
+
+      if (J->isCall() || J->isReturn()) break;
+
+      if (J->isBranch()) {
+        // Only match an unoccupied D-form backward branch: taken nearly every
+        // iteration, so D-form + filled slot (2 cycles) beats a NOP or
+        // demotion to non-D (3 cycles taken).  Skip already-bundled branches
+        // to avoid extending a 1-slot bundle into a multi-slot bundle.
+        if (J->hasDelaySlot() && !J->isBundledWithSucc()) {
+          for (const MachineOperand &MO : J->operands()) {
+            if (MO.isMBB() && MO.getMBB()->getNumber() <= MBB.getNumber()) {
+              BranchIt = J;
+              break;
+            }
+          }
+        }
+        break;
+      }
+    }
+
+    if (BranchIt == E) continue;
+
+    // Substitute every USE of rX with rY in [Addk+1 .. BranchIt] inclusive.
+    // The branch is included so that a branch that directly tests rX (e.g.
+    // bgeid rX) is correctly rewritten to test rY.  The addk operand is a def
+    // and is excluded by the !MO.isDef() guard.
+    for (auto K = I; K != std::next(BranchIt); ++K)
+      for (MachineOperand &MO : K->operands())
+        if (MO.isReg() && !MO.isDef() && MO.getReg() == rX)
+          MO.setReg(rY);
+
+    // Move Addk into the delay slot: splice immediately after BranchIt, then
+    // bundle branch + Addk together (mirrors searchBackward's splice+bundle).
+    MBB.splice(std::next(BranchIt), &MBB, Addk);
+    MIBundleBuilder(MBB, BranchIt.getInstrIterator(),
+                    std::next(BranchIt.getInstrIterator(), 2));
+    ++FilledSlots;
+    ++UsefulSlots;
+    Changed = true;
+    // I was already advanced past Addk; continue scanning from there.
+  }
+  return Changed;
+}
+
+// ---------------------------------------------------------------------------
 // Pre-increment sinking
 // ---------------------------------------------------------------------------
 
@@ -441,14 +542,16 @@ bool MicroBlazeDelaySlotFiller::runOnMachineFunction(MachineFunction &MF) {
       MF.getSubtarget<MicroBlazeSubtarget>().getInstrInfo();
   bool Changed = false;
 
-  // Sink loop pre-increments before delay-slot filling so searchBackward
-  // can move the increment into the branch delay slot.
+  // Hoist ISel register copies into delay slots of backward branches, and
+  // sink loop pre-increments, before the general delay-slot filler runs.
+  for (MachineBasicBlock &MBB : MF)
+    Changed |= hoistCopyToDelaySlot(MBB);
   for (MachineBasicBlock &MBB : MF)
     Changed |= sinkPreIncrements(MBB);
 
   for (MachineBasicBlock &MBB : MF) {
     for (auto I = MBB.begin(); I != MBB.end(); ++I) {
-      if (!I->hasDelaySlot())
+      if (!I->hasDelaySlot() || I->isBundledWithSucc())
         continue;
 
       bool Filled = false;
