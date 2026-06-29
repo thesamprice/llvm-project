@@ -11,6 +11,7 @@
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/SelectionDAGNodes.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicsMicroBlaze.h"
 
 using namespace llvm;
 
@@ -91,6 +92,26 @@ bool MicroBlazeDAGToDAGISel::SelectADDRrr(SDValue Addr, SDValue &Base,
     return true;
   }
   return false;
+}
+
+// SelectFSLImm — match a constant FSL port (0..15) and bind it to rfslN so a
+// static FSL get/put can encode the port in the instruction word.
+bool MicroBlazeDAGToDAGISel::SelectFSLImm(SDValue N, SDValue &Port) {
+  auto *C = dyn_cast<ConstantSDNode>(N);
+  if (!C)
+    return false;
+  uint64_t V = C->getZExtValue();
+  if (V > 15)
+    return false;
+  // rfslN enum values are not guaranteed contiguous (cf. the disassembler's
+  // RFSLDecoderTable), so map through an explicit table.
+  static const MCPhysReg RFSLRegs[16] = {
+      MicroBlaze::rfsl0,  MicroBlaze::rfsl1,  MicroBlaze::rfsl2,  MicroBlaze::rfsl3,
+      MicroBlaze::rfsl4,  MicroBlaze::rfsl5,  MicroBlaze::rfsl6,  MicroBlaze::rfsl7,
+      MicroBlaze::rfsl8,  MicroBlaze::rfsl9,  MicroBlaze::rfsl10, MicroBlaze::rfsl11,
+      MicroBlaze::rfsl12, MicroBlaze::rfsl13, MicroBlaze::rfsl14, MicroBlaze::rfsl15};
+  Port = CurDAG->getRegister(RFSLRegs[V], MVT::i32);
+  return true;
 }
 
 //===----------------------------------------------------------------------===//

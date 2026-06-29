@@ -42,6 +42,12 @@ public:
   bool SelectADDRri(SDValue Addr, SDValue &Base, SDValue &Offset);
   bool SelectADDRrr(SDValue Addr, SDValue &Base, SDValue &Index);
 
+  // Match a constant FSL port number in 0..15 and bind it to the corresponding
+  // non-allocatable rfslN register, so a static FSL get/put can encode the port
+  // in the instruction word.  Fails for non-constants and out-of-range values,
+  // which then select the dynamic (port-in-GPR) form.  See MicroBlazeInstrFSL.td.
+  bool SelectFSLImm(SDValue N, SDValue &Port);
+
   void Select(SDNode *Node) override;
 
 // Auto-generated instruction selector (SelectCode, CheckPatternPredicate, …).

@@ -43,6 +43,11 @@
 // Parameters: name=base mnemonic (without 'd' suffix), N,C,T,A,E flag bits.
 //===----------------------------------------------------------------------===//
 
+// fslport — ISel ComplexPattern: a constant FSL port (0..15) bound to its rfslN
+// register (so the static encoding can be selected); fails otherwise so the
+// dynamic (port-in-GPR) form is used.  Backed by SelectFSLImm in ISelDAGToDAG.
+def fslport : ComplexPattern<i32, 1, "SelectFSLImm", [imm]>;
+
 multiclass FSLGET<string name, bit N, bit C, bit T, bit A, bit E> {
   // Static variant: encoded port in bits[7:4].
   def "" : MBFSLG<N, C, T, A, E> {
@@ -233,3 +238,50 @@ let Predicates = [HasFSLPred], hasSideEffects = 1 in {
   defm TNECAPUT : FSLPUT<"tnecaput", 1, 1, 1, 1, 1>;  // static 0x6C00FC00  dynamic 0x4C0007E0
 
 } // let Predicates = [HasFSLPred], hasSideEffects = 1
+
+//===----------------------------------------------------------------------===//
+// FSL ISel patterns — map the llvm.microblaze.fsl.* intrinsics to instructions.
+//
+// A constant port (0..15) matches the fslport ComplexPattern and selects the
+// static encoding (get/put rD, rfslN); any other port selects the dynamic form
+// (getd/putd with the port in a GPR).  The instruction record names are the
+// upper-cased mnemonics (defm GET → GET / GETD), so !toupper(name) recovers the
+// static instruction and !toupper(name)#"D" the dynamic one.
+//
+// These live outside the hasSideEffects let-block above because Pat records do
+// not carry that field; the predicate is applied explicitly instead.
+//===----------------------------------------------------------------------===//
+
+let Predicates = [HasFSLPred] in {
+
+  foreach name = ["get",   "eget",   "aget",   "eaget",
+                  "tget",  "teget",  "taget",  "teaget",
+                  "cget",  "ecget",  "caget",  "ecaget",
+                  "tcget", "tecget", "tcaget", "tecaget",
+                  "nget",  "neget",  "naget",  "neaget",
+                  "tnget", "tneget", "tnaget", "tneaget",
+                  "ncget", "necget", "ncaget", "necaget",
+                  "tncget","tnecget","tncaget","tnecaget"] in {
+    defvar Intr = !cast<Intrinsic>("int_microblaze_fsl_" # name);
+    def : Pat<(Intr fslport:$port),
+              (!cast<Instruction>(!toupper(name)) $port)>;
+    def : Pat<(Intr GPR:$rB),
+              (!cast<Instruction>(!toupper(name) # "D") GPR:$rB)>;
+  }
+
+  foreach name = ["put",   "eput",   "aput",   "eaput",
+                  "tput",  "teput",  "taput",  "teaput",
+                  "cput",  "ecput",  "caput",  "ecaput",
+                  "tcput", "tecput", "tcaput", "tecaput",
+                  "nput",  "neput",  "naput",  "neaput",
+                  "tnput", "tneput", "tnaput", "tneaput",
+                  "ncput", "necput", "ncaput", "necaput",
+                  "tncput","tnecput","tncaput","tnecaput"] in {
+    defvar Intr = !cast<Intrinsic>("int_microblaze_fsl_" # name);
+    def : Pat<(Intr GPR:$rA, fslport:$port),
+              (!cast<Instruction>(!toupper(name)) GPR:$rA, $port)>;
+    def : Pat<(Intr GPR:$rA, GPR:$rB),
+              (!cast<Instruction>(!toupper(name) # "D") GPR:$rA, GPR:$rB)>;
+  }
+
+} // let Predicates = [HasFSLPred]

@@ -445,6 +445,16 @@ namespace clang {
     };
   }
 
+  /// MicroBlaze builtins
+  namespace MicroBlaze {
+    enum {
+        LastTIBuiltin = clang::Builtin::FirstTSBuiltin-1,
+#define BUILTIN(ID, TYPE, ATTRS) BI##ID,
+#include "clang/Basic/BuiltinsMicroBlaze.def"
+        LastTSBuiltin
+    };
+  }
+
   /// XCore builtins
   namespace XCore {
     enum {

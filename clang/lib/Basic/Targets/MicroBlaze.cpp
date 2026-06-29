@@ -7,10 +7,31 @@
 //===----------------------------------------------------------------------===//
 
 #include "MicroBlaze.h"
+#include "clang/Basic/Builtins.h"
 #include "clang/Basic/MacroBuilder.h"
+#include "clang/Basic/TargetBuiltins.h"
 
 using namespace clang;
 using namespace clang::targets;
+
+static constexpr int NumBuiltins =
+    clang::MicroBlaze::LastTSBuiltin - Builtin::FirstTSBuiltin;
+
+static constexpr llvm::StringTable BuiltinStrings =
+    CLANG_BUILTIN_STR_TABLE_START
+#define BUILTIN CLANG_BUILTIN_STR_TABLE
+#include "clang/Basic/BuiltinsMicroBlaze.def"
+    ;
+
+static constexpr auto BuiltinInfos = Builtin::MakeInfos<NumBuiltins>({
+#define BUILTIN CLANG_BUILTIN_ENTRY
+#include "clang/Basic/BuiltinsMicroBlaze.def"
+});
+
+llvm::SmallVector<Builtin::InfosShard>
+MicroBlazeTargetInfo::getTargetBuiltins() const {
+  return {{&BuiltinStrings, BuiltinInfos}};
+}
 
 // R0–R31 in order; ABI aliases handled by GCCRegAliases.
 const char *const MicroBlazeTargetInfo::GCCRegNames[] = {
