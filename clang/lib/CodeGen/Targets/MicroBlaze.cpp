@@ -121,8 +121,36 @@ class MicroBlazeTargetCodeGenInfo : public TargetCodeGenInfo {
 public:
   MicroBlazeTargetCodeGenInfo(CodeGen::CodeGenTypes &CGT)
       : TargetCodeGenInfo(std::make_unique<MicroBlazeABIInfo>(CGT)) {}
+
+  void setTargetAttributes(const Decl *D, llvm::GlobalValue *GV,
+                           CodeGen::CodeGenModule &M) const override;
 };
 } // end anonymous namespace
+
+void MicroBlazeTargetCodeGenInfo::setTargetAttributes(
+    const Decl *D, llvm::GlobalValue *GV, CodeGen::CodeGenModule &M) const {
+  const auto *FD = dyn_cast_or_null<FunctionDecl>(D);
+  if (!FD)
+    return;
+  auto *F = dyn_cast<llvm::Function>(GV);
+  if (!F)
+    return;
+
+  // __attribute__((interrupt_handler)) / ((save_volatiles)) are callee-side
+  // properties: the function preserves extra registers (and, for an interrupt,
+  // MSR + rtid), but callers still call it normally.  Encoding this as a
+  // function attribute — rather than a distinct calling convention — keeps the
+  // call sites unchanged (a CC mismatch between a default-CC call and a cc73/cc74
+  // callee is UB and would delete the call).  MicroBlazeFrameLowering keys the
+  // save/restore + return behavior off these attributes.
+  if (FD->hasAttr<MicroBlazeInterruptHandlerAttr>()) {
+    F->addFnAttr("interrupt-handler");
+    F->addFnAttr(llvm::Attribute::NoInline);
+  } else if (FD->hasAttr<MicroBlazeSaveVolatilesAttr>()) {
+    F->addFnAttr("save-volatiles");
+    F->addFnAttr(llvm::Attribute::NoInline);
+  }
+}
 
 std::unique_ptr<TargetCodeGenInfo>
 CodeGen::createMicroBlazeTargetCodeGenInfo(CodeGenModule &CGM) {

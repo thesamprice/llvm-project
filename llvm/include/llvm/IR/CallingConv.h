@@ -128,6 +128,15 @@ namespace CallingConv {
     /// parameter space.
     PTX_Device = 72,
 
+    /// MicroBlaze interrupt handler: saves/restores the volatile registers it
+    /// uses plus the dedicated R17/R18 and MSR, and returns with rtid.
+    MICROBLAZE_INTR = 73,
+
+    /// MicroBlaze save-volatiles: an ordinary function that additionally
+    /// preserves the volatile registers (R3-R12) and dedicated R17/R18 it uses,
+    /// returning normally with rtsd.
+    MICROBLAZE_SVOL = 74,
+
     /// Used for SPIR non-kernel device functions. No lowering or expansion of
     /// arguments. Structures are passed as a pointer to a struct with the
     /// byval attribute. Functions can only call SPIR_FUNC and SPIR_KERNEL

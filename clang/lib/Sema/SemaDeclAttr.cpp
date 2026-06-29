@@ -7647,6 +7647,12 @@ ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D, const ParsedAttr &AL,
   case ParsedAttr::AT_AVRSignal:
     S.AVR().handleSignalAttr(D, AL);
     break;
+  case ParsedAttr::AT_MicroBlazeInterruptHandler:
+    handleSimpleAttribute<MicroBlazeInterruptHandlerAttr>(S, D, AL);
+    break;
+  case ParsedAttr::AT_MicroBlazeSaveVolatiles:
+    handleSimpleAttribute<MicroBlazeSaveVolatilesAttr>(S, D, AL);
+    break;
   case ParsedAttr::AT_BPFPreserveAccessIndex:
     S.BPF().handlePreserveAccessIndexAttr(D, AL);
     break;

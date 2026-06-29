@@ -46,6 +46,10 @@ def RTED : MBB<0x2D, (outs), (ins GPR:$rA, simm16:$imm),
 
 } // let hasSideEffects = 1
 
+// Interrupt-handler return (cc73): rtid r14, 0 — resume at the interrupt
+// return address held in R14 (UG984 Table 93).
+def : Pat<(MBIntrRet), (RTID R14, 0)>;
+
 // MBAR sel — memory barrier (opcode 0x2E, UG984 §2, §5).
 // Encoding: [31:26]=0x2E  [25:21]=sel  [20:16]=0b00010  [15:0]=0x0004
 //   sel=0 — full barrier + BTC flush (use sparingly; disrupts branch prediction)

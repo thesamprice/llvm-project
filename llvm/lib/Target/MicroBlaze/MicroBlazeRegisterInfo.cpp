@@ -7,11 +7,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "MicroBlazeRegisterInfo.h"
+#include "MicroBlaze.h"
 #include "MCTargetDesc/MicroBlazeMCTargetDesc.h"
 #include "MicroBlazeSubtarget.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/IR/Function.h"
 #include "llvm/Support/ErrorHandling.h"
 
 #define GET_REGINFO_TARGET_DESC
@@ -24,14 +26,37 @@ using namespace llvm;
 MicroBlazeRegisterInfo::MicroBlazeRegisterInfo()
     : MicroBlazeGenRegisterInfo(MicroBlaze::R15) {}
 
+// interrupt_handler / save_volatiles functions are identified by either the
+// cc73/cc74 calling convention (IR-level) or the Clang-emitted function
+// attribute (so call sites stay normal — see clang Targets/MicroBlaze.cpp).
+// isMicroBlazeInterruptFunc: either kind (preserve volatiles + R17/R18).
+// isMicroBlazeInterruptHandler: true interrupt only (also MSR + rtid).
+bool llvm::isMicroBlazeInterruptHandler(const Function &F) {
+  return F.getCallingConv() == CallingConv::MICROBLAZE_INTR ||
+         F.hasFnAttribute("interrupt-handler");
+}
+bool llvm::isMicroBlazeInterruptFunc(const Function &F) {
+  return isMicroBlazeInterruptHandler(F) ||
+         F.getCallingConv() == CallingConv::MICROBLAZE_SVOL ||
+         F.hasFnAttribute("save-volatiles");
+}
+
 const uint16_t *
-MicroBlazeRegisterInfo::getCalleeSavedRegs(const MachineFunction *) const {
+MicroBlazeRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
+  // Interrupt / save-volatiles handlers must also preserve the volatile
+  // registers (R3-R12) they clobber; PEI spills the used subset.
+  if (MF && isMicroBlazeInterruptFunc(MF->getFunction()))
+    return CSR_Interrupt_SaveList;
   return CSR_SaveList;
 }
 
 const uint32_t *
 MicroBlazeRegisterInfo::getCallPreservedMask(const MachineFunction &,
-                                             CallingConv::ID) const {
+                                             CallingConv::ID CC) const {
+  // Keyed on the callee's CC only: a normal-CC call to a save_volatiles function
+  // uses the default mask (the caller does not rely on the extra preservation).
+  if (CC == CallingConv::MICROBLAZE_INTR || CC == CallingConv::MICROBLAZE_SVOL)
+    return CSR_Interrupt_RegMask;
   return CSR_RegMask;
 }
 

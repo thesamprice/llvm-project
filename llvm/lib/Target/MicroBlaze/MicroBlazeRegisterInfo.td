@@ -55,6 +55,19 @@ def R31 : MBReg<31, "r31">,           DwarfRegNum<[31]>;
 // Callee-saved registers per MicroBlaze ABI: R19 (frame pointer), R22–R31.
 def CSR : CalleeSavedRegs<(add R19, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31)>;
 
+// Interrupt / save-volatiles calling conventions (UG984 Table 93): an interrupt
+// can fire between any two instructions, so the handler must preserve the
+// volatile (caller-saved) registers R3-R12 it uses, in addition to the normal
+// non-volatiles.  PEI spills only the subset actually clobbered.  The dedicated
+// R17/R18 are dedicated (reserved) but must also be preserved; FrameLowering
+// force-marks them saved (PEI's clobber detection never sees reserved regs) so
+// they flow through the normal spill/restore in list order.  MSR (interrupt CC
+// only) is saved separately in FrameLowering.
+def CSR_Interrupt : CalleeSavedRegs<(add R3, R4, R5, R6, R7, R8, R9, R10, R11, R12,
+                                          R17, R18,
+                                          R19, R22, R23, R24, R25, R26, R27, R28,
+                                          R29, R30, R31)>;
+
 // GPR — all potentially allocatable integer registers.  Reserved registers
 // (R0, R1, R2, R13, R14, R15, R16, R17, R18) are excluded from this class;
 // they are handled in MicroBlazeRegisterInfo::getReservedRegs().

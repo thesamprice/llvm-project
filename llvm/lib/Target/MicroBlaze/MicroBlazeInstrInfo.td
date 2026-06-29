@@ -28,6 +28,8 @@ def SDT_MBCall : SDTypeProfile<0, -1, [SDTCisPtrTy<0>]>;
 
 def MBRetFlag : SDNode<"MicroBlazeISD::RET_FLAG", SDTNone,
     [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
+def MBIntrRet : SDNode<"MicroBlazeISD::INTR_RET", SDTNone,
+    [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
 
 def MBCall : SDNode<"MicroBlazeISD::CALL", SDT_MBCall,
     [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue, SDNPVariadic]>;

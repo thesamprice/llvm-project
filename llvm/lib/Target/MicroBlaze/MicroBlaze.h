@@ -12,11 +12,17 @@
 namespace llvm {
 
 class FunctionPass;
+class Function;
 class MicroBlazeTargetMachine;
 class PassRegistry;
 
 FunctionPass *createMicroBlazeDelaySlotFiller();
 void initializeMicroBlazeDelaySlotFillerPass(PassRegistry &);
+
+// Interrupt-ABI predicates (cc73/cc74 or the interrupt-handler/save-volatiles
+// function attributes).  Defined in MicroBlazeRegisterInfo.cpp.
+bool isMicroBlazeInterruptHandler(const Function &F);
+bool isMicroBlazeInterruptFunc(const Function &F);
 
 } // namespace llvm
 

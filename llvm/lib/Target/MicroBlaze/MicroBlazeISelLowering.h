@@ -25,6 +25,7 @@ namespace MicroBlazeISD {
 enum NodeType : unsigned {
   FIRST_NUMBER = ISD::BUILTIN_OP_END,
   RET_FLAG, // Return; operands are chain, glue, and optional return-value regs.
+  INTR_RET, // Interrupt-handler return (rtid r14, 0); same operands as RET_FLAG.
   CALL,     // Direct or indirect call; operand 0 = chain, 1 = callee, rest = args.
   Wrapper,  // Wraps a global/extern symbol for ADDIK-based address materialisation.
   GOT_LOAD, // PIC GOT-indirect load: lwi rD, r20, sym@got (R_MICROBLAZE_GOT_64).

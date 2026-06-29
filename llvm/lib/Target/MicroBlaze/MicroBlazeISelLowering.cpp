@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "MicroBlaze.h"
 #include "MicroBlazeISelLowering.h"
 #include "MCTargetDesc/MicroBlazeMCTargetDesc.h"
 #include "MicroBlazeBaseInfo.h"
@@ -491,6 +492,7 @@ const char *MicroBlazeTargetLowering::getTargetNodeName(unsigned Opcode) const {
   switch (static_cast<MicroBlazeISD::NodeType>(Opcode)) {
   case MicroBlazeISD::FIRST_NUMBER: break;
   case MicroBlazeISD::RET_FLAG:     return "MicroBlazeISD::RET_FLAG";
+  case MicroBlazeISD::INTR_RET:     return "MicroBlazeISD::INTR_RET";
   case MicroBlazeISD::CALL:         return "MicroBlazeISD::CALL";
   case MicroBlazeISD::Wrapper:      return "MicroBlazeISD::Wrapper";
   case MicroBlazeISD::GOT_LOAD:    return "MicroBlazeISD::GOT_LOAD";
@@ -1469,7 +1471,13 @@ SDValue MicroBlazeTargetLowering::LowerReturn(
   if (Flag.getNode())
     RetOps.push_back(Flag);
 
-  return DAG.getNode(MicroBlazeISD::RET_FLAG, DL, MVT::Other, RetOps);
+  // A true interrupt handler returns through R14 with rtid; everything else
+  // (including save_volatiles) returns normally with rtsd.  Recognized via the
+  // cc73 calling convention or the interrupt-handler function attribute.
+  unsigned RetOpc = isMicroBlazeInterruptHandler(MF.getFunction())
+                        ? MicroBlazeISD::INTR_RET
+                        : MicroBlazeISD::RET_FLAG;
+  return DAG.getNode(RetOpc, DL, MVT::Other, RetOps);
 }
 
 //===----------------------------------------------------------------------===//
