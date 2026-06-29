@@ -190,6 +190,8 @@ void MicroBlazeMCCodeEmitter::emitIMMPrefix(
         FKind = MicroBlaze::FIXUP_MICROBLAZE_GOT_64;
       else if (Spec == ELF::R_MICROBLAZE_PLT_64)
         FKind = MicroBlaze::FIXUP_MICROBLAZE_PLT_64;
+      else if (Spec == ELF::R_MICROBLAZE_GOTOFF_64)
+        FKind = MicroBlaze::FIXUP_MICROBLAZE_GOTOFF_64;
       else
         FKind = IsPCRel ? MicroBlaze::FIXUP_MICROBLAZE_64_PCREL
                         : MicroBlaze::FIXUP_MICROBLAZE_64;

@@ -38,12 +38,18 @@ def BRA   : MBA<0x26, 0, (outs), (ins GPR:$rB),
 }
 
 // BRAD rB — absolute branch, delay  (rA=0b11000).
+// Selection target for ISD::BRIND (computed goto / indirect branch through a
+// register-held absolute address, e.g. a blockaddress or jump-table entry).
 def BRAD  : MBA<0x26, 0, (outs), (ins GPR:$rB),
                 "brad\t$rB", []> {
   let rD = 0b00000;
   let rA = 0b11000;
-  let isBranch = 1; let isTerminator = 1; let isBarrier = 1; let hasDelaySlot = 1;
+  let isBranch = 1; let isTerminator = 1; let isBarrier = 1;
+  let isIndirectBranch = 1; let hasDelaySlot = 1;
 }
+
+// Indirect branch: target absolute address held in a GPR.
+def : Pat<(brind GPR:$rB), (BRAD GPR:$rB)>;
 
 // BRLD rD, rB — relative branch w/ link and delay; rD ← PC+4  (rA=0b10100).
 def BRLD  : MBA<0x26, 0, (outs), (ins GPR:$rD, GPR:$rB),

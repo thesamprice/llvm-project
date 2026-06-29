@@ -41,6 +41,9 @@ void MicroBlazeMCAsmInfo::printSpecifierExpr(raw_ostream &OS,
   case ELF::R_MICROBLAZE_GOTPC_64:
     OS << "@gotpc";
     break;
+  case ELF::R_MICROBLAZE_GOTOFF_64:
+    OS << "@gotoff";
+    break;
   default:
     OS << "@<unknown:" << Expr.getSpecifier() << ">";
     break;

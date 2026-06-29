@@ -121,6 +121,8 @@ def : Pat<(MBCall (i32 texternalsym:$callee)),
 def : Pat<(MBWrapper tglobaladdr:$in),  (ADDIK R0, tglobaladdr:$in)>;
 def : Pat<(MBWrapper texternalsym:$in), (ADDIK R0, texternalsym:$in)>;
 def : Pat<(MBWrapper tconstpool:$in),   (ADDIK R0, tconstpool:$in)>;
+def : Pat<(MBWrapper tblockaddress:$in), (ADDIK R0, tblockaddress:$in)>;
+def : Pat<(MBWrapper tjumptable:$in),   (ADDIK R0, tjumptable:$in)>;
 
 //===----------------------------------------------------------------------===//
 // Conditional select pseudo (SELECT_CC_PSEUDO)

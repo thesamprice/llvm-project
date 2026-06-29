@@ -77,6 +77,25 @@ MicroBlazeMCInstLower::LowerOperand(const MachineOperand &MO,
     return MCOperand::createExpr(
         MCSymbolRefExpr::create(MO.getMBB()->getSymbol(), Ctx));
 
+  case MachineOperand::MO_BlockAddress: {
+    const MCSymbol *BASym = Printer.GetBlockAddressSymbol(MO.getBlockAddress());
+    const MCExpr *Expr = MCSymbolRefExpr::create(BASym, Ctx);
+    if (MO.getOffset())
+      Expr = MCBinaryExpr::createAdd(
+          Expr, MCConstantExpr::create(MO.getOffset(), Ctx), Ctx);
+    return MCOperand::createExpr(Expr);
+  }
+
+  case MachineOperand::MO_JumpTableIndex: {
+    const MCExpr *Expr =
+        MCSymbolRefExpr::create(Printer.GetJTISymbol(MO.getIndex()), Ctx);
+    // PIC: the jump-table base is materialised as an offset from the GOT base
+    // (addik rD, r20, .LJTI@GOTOFF), a link-time constant.
+    if (MO.getTargetFlags() == MicroBlazeII::MO_GOTOFF)
+      Expr = MCSpecifierExpr::create(Expr, ELF::R_MICROBLAZE_GOTOFF_64, Ctx);
+    return MCOperand::createExpr(Expr);
+  }
+
   case MachineOperand::MO_RegisterMask:
     return MCOperand(); // skip — register masks are not MC operands.
 

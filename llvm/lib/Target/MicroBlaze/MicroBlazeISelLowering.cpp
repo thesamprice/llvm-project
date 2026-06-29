@@ -401,6 +401,11 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   setOperationAction(ISD::GlobalAddress,  MVT::i32, Custom);
   setOperationAction(ISD::ExternalSymbol, MVT::i32, Custom);
   setOperationAction(ISD::ConstantPool,   MVT::i32, Custom);
+  setOperationAction(ISD::BlockAddress,   MVT::i32, Custom);
+
+  // Indirect branch (computed goto / blockaddress / jump-table dispatch) selects
+  // to BRAD (absolute register branch).
+  setOperationAction(ISD::BRIND,          MVT::Other, Legal);
 
   // Conditional branches: custom-lower BR_CC; BRCOND expands to BR_CC first.
   setOperationAction(ISD::BR_CC,     MVT::i32, Custom);
@@ -458,8 +463,12 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   setOperationAction(ISD::VACOPY,  MVT::Other, Expand);
   setOperationAction(ISD::VAEND,   MVT::Other, Expand);
 
-  // No jump-table support: fall back to decision trees for all switch stmts.
-  setMinimumJumpTableEntries(INT_MAX);
+  // Jump tables: materialise the table address via the Wrapper node and let the
+  // generic legalizer expand BR_JT into (load table[index]) + BRIND.  Static
+  // model uses EK_BlockAddress entries (absolute MBB addresses, R_MICROBLAZE_32).
+  // Keep LLVM's default 4-entry minimum (dense switches below that stay trees).
+  setOperationAction(ISD::JumpTable, MVT::i32,   Custom);
+  setOperationAction(ISD::BR_JT,     MVT::Other, Expand);
 
   // Memory barriers: ISD::ATOMIC_FENCE → MBAR 1 (data-side barrier, UG984 §2).
   // MBAR 0 would also clear the BTC; MBAR 1 avoids that cost.
@@ -514,6 +523,8 @@ SDValue MicroBlazeTargetLowering::LowerOperation(SDValue Op,
   case ISD::GlobalAddress:  return LowerGlobalAddress(Op, DAG);
   case ISD::ExternalSymbol: return LowerExternalSymbol(Op, DAG);
   case ISD::ConstantPool:   return LowerConstantPool(Op, DAG);
+  case ISD::BlockAddress:   return LowerBlockAddress(Op, DAG);
+  case ISD::JumpTable:      return LowerJumpTable(Op, DAG);
   case ISD::BR_CC:          return LowerBR_CC(Op, DAG);
   case ISD::SELECT_CC:      return LowerSELECT_CC(Op, DAG);
   case ISD::SETCC:          return LowerSETCC(Op, DAG);
@@ -1128,6 +1139,40 @@ SDValue MicroBlazeTargetLowering::LowerConstantPool(SDValue Op,
   SDValue CPAddr = DAG.getTargetConstantPool(CP->getConstVal(), MVT::i32,
                                              CP->getAlign(), CP->getOffset());
   return DAG.getNode(MicroBlazeISD::Wrapper, DL, MVT::i32, CPAddr);
+}
+
+SDValue MicroBlazeTargetLowering::LowerJumpTable(SDValue Op,
+                                                  SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  auto *JT = cast<JumpTableSDNode>(Op);
+
+  if (isPositionIndependent()) {
+    // PIC: the table entries are MBB - .LJTI label differences (the default
+    // EK_LabelDifference32 encoding), so the base must be materialised position-
+    // independently as an offset from the GOT base: addik rD, r20, .LJTI@GOTOFF
+    // (a link-time constant — no runtime relocation).
+    SDValue JTI = DAG.getTargetJumpTable(JT->getIndex(), MVT::i32,
+                                         MicroBlazeII::MO_GOTOFF);
+    SDValue Off = DAG.getNode(MicroBlazeISD::Wrapper, DL, MVT::i32, JTI);
+    SDValue GOTBase = DAG.getRegister(MicroBlaze::R20, MVT::i32);
+    return DAG.getNode(ISD::ADD, DL, MVT::i32, GOTBase, Off);
+  }
+
+  // Static: materialise the absolute base via Wrapper → ADDIK rD, r0, .LJTI.
+  SDValue JTI = DAG.getTargetJumpTable(JT->getIndex(), MVT::i32);
+  return DAG.getNode(MicroBlazeISD::Wrapper, DL, MVT::i32, JTI);
+}
+
+SDValue MicroBlazeTargetLowering::LowerBlockAddress(SDValue Op,
+                                                     SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  auto *BA = cast<BlockAddressSDNode>(Op);
+  // Block addresses are function-local labels; materialise the absolute address
+  // via the Wrapper node → ADDIK rD, r0, .Ltmp (R_MICROBLAZE_32), same path as
+  // GlobalAddress in the static model.
+  SDValue BAWrapper =
+      DAG.getTargetBlockAddress(BA->getBlockAddress(), MVT::i32, BA->getOffset());
+  return DAG.getNode(MicroBlazeISD::Wrapper, DL, MVT::i32, BAWrapper);
 }
 
 //===----------------------------------------------------------------------===//

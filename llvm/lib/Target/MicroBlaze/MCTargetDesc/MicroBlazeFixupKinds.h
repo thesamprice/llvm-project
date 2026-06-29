@@ -43,6 +43,10 @@ enum Fixups {
   // Applied at the IMM instruction; linker creates/patches PLT stub.
   FIXUP_MICROBLAZE_PLT_64,
 
+  // R_MICROBLAZE_GOTOFF_64 — two-instruction offset from the GOT base
+  // (IMM + addik r20 pair).  A link-time constant; used for PIC jump tables.
+  FIXUP_MICROBLAZE_GOTOFF_64,
+
   // Marker.
   LastTargetFixupKind,
   NumTargetFixupKinds = LastTargetFixupKind - FirstTargetFixupKind

@@ -18,6 +18,7 @@ enum TOF : unsigned {
   MO_NO_FLAG = 0,
   MO_GOT     = 1, // @got: load address from GOT via R20 (R_MICROBLAZE_GOT_64)
   MO_PLT     = 2, // @plt: call via PLT stub (R_MICROBLAZE_PLT_64)
+  MO_GOTOFF  = 3, // @gotoff: link-time offset from the GOT base (R_MICROBLAZE_GOTOFF_64)
 };
 
 } // namespace MicroBlazeII
