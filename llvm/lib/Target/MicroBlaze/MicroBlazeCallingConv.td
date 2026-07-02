@@ -9,9 +9,9 @@
 // MicroBlaze ILP32 calling convention (little-endian, microblazeel).
 //
 // Argument registers: R5–R10 (6 × i32).  Additional arguments are passed on
-// the stack at 4-byte alignment.  Structures are passed by reference (pointer
-// in an arg register or on the stack) — aggregate lowering is handled by the
-// frontend, so only scalar types reach the calling-convention machine.
+// the stack at 4-byte alignment.  Structures are passed by value: the
+// MicroBlazeABIInfo in clang/lib/CodeGen/Targets/MicroBlaze.cpp coerces
+// aggregates to [N x i32] before the call, so only i32 scalars reach here.
 //
 // Return registers: R3 for a single i32/f32 word; R3:R4 for an i64/f64 pair
 // (R3 = low word, R4 = high word).
