@@ -40,6 +40,14 @@ welcome.
 * [Lanai Instruction Set Architecture](http://g.co/lanai/isa)
 
 
+### MicroBlaze
+
+* [AMD UG984 — Vivado Design Suite: MicroBlaze Processor Reference Guide](https://docs.amd.com/r/en-US/ug984-vivado-microblaze-ref)
+
+  Chapter 4: Application Binary Interface (ABI, calling convention, stack frame) \
+  Chapter 5: Instruction Set Architecture (encodings, formats, opcodes)
+
+
 ### MIPS
 
 * [MIPS Processor Architecture](https://www.mips.com/products/)
