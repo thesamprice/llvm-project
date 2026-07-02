@@ -34,6 +34,10 @@ def HasDividePred : Predicate<"Subtarget->hasDivide()">,
     AssemblerPredicate<(all_of FeatureDivide), "divide">;
 def HasReorderInstrPred : Predicate<"Subtarget->hasReorderInstr()">,
     AssemblerPredicate<(all_of FeatureReorderInstr), "reorder">;
+def HasHardFloatPred : Predicate<"Subtarget->hasHardFloat()">,
+    AssemblerPredicate<(all_of FeatureHardFloat), "hard-float">;
+def HasFloatConvertPred : Predicate<"Subtarget->hasFloatConvert()">,
+    AssemblerPredicate<(all_of FeatureFloatConvert), "float-convert">;
 
 //===----------------------------------------------------------------------===//
 // Base instruction class
