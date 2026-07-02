@@ -38,6 +38,8 @@ def HasHardFloatPred : Predicate<"Subtarget->hasHardFloat()">,
     AssemblerPredicate<(all_of FeatureHardFloat), "hard-float">;
 def HasFloatConvertPred : Predicate<"Subtarget->hasFloatConvert()">,
     AssemblerPredicate<(all_of FeatureFloatConvert), "float-convert">;
+def HasExtendedAddrPred : Predicate<"Subtarget->hasExtendedAddr()">,
+    AssemblerPredicate<(all_of FeatureExtendedAddr), "extended-addr">;
 
 //===----------------------------------------------------------------------===//
 // Base instruction class

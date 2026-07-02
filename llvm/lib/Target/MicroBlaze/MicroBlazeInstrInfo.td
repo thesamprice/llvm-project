@@ -89,6 +89,7 @@ def memri : Operand<iPTR> {
 def memrr : Operand<iPTR> {
   let PrintMethod  = "printMemOperandRR";
   let MIOperandInfo = (ops GPR:$base, GPR:$index);
+  let EncoderMethod = "getMemOpValue";
   let DecoderMethod = "decodeMemRROperand";
 }
 

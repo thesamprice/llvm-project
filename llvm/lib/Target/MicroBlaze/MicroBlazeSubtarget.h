@@ -36,6 +36,7 @@ class MicroBlazeSubtarget : public MicroBlazeGenSubtargetInfo {
   bool HasReorderInstr = false;
   bool HasHardFloat = false;
   bool HasFloatConvert = false;
+  bool HasExtendedAddr = false;
 
   SelectionDAGTargetInfo TSI;
   MicroBlazeInstrInfo InstrInfo;
@@ -72,6 +73,7 @@ public:
   bool hasReorderInstr() const { return HasReorderInstr; }
   bool hasHardFloat() const { return HasHardFloat; }
   bool hasFloatConvert() const { return HasFloatConvert; }
+  bool hasExtendedAddr() const { return HasExtendedAddr; }
 
   void initLibcallLoweringInfo(LibcallLoweringInfo &Info) const override;
 };

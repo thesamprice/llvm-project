@@ -33,6 +33,9 @@ def FeatureHardFloat : SubtargetFeature<"hard-float", "HasHardFloat",
 def FeatureFloatConvert : SubtargetFeature<"float-convert", "HasFloatConvert",
     "true", "Enable floating-point conversion instructions (flt, fint, fsqrt)">;
 
+def FeatureExtendedAddr : SubtargetFeature<"extended-addr", "HasExtendedAddr",
+    "true", "Enable extended-address memory instructions (lbuea, lhuea, lwea, sbea, shea, swea)">;
+
 //===----------------------------------------------------------------------===//
 // Register file, Calling Conv, Instruction Descriptions (added in later commits)
 //===----------------------------------------------------------------------===//

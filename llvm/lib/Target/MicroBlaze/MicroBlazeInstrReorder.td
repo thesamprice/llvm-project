@@ -27,5 +27,11 @@ let Predicates = [HasReorderInstrPred] in {
                   "swaph\t$rD, $rA", []> {
     let rB = 0;
   }
+
+  // bswap32(x) = swaph(swapb(x)):
+  //   swapb: ABCD → BADC  (swap bytes within each halfword)
+  //   swaph: BADC → DCBA  (swap the two halfwords)
+  // Two instructions vs the shift/or expansion (8+ instructions).
+  def : Pat<(bswap i32:$rA), (SWAPH (SWAPB GPR:$rA))>;
 }
 
