@@ -11,11 +11,11 @@
 // Unconditional branch instructions (opcode=0x2E)
 //===----------------------------------------------------------------------===//
 //
-// The rD/rA fields encode branch modifiers instead of register numbers:
-//   rD[4] = delay slot
-//   rD[3] = absolute address
-//   rD[2] = link (store PC+4 in link register)
-// rA field is 0 for unconditional; for BRALID it holds modifier flags.
+// rD[25:21]: link register (only for *LID variants; 0 otherwise).
+// rA[20:16]: branch modifier flags (UG984 Ch.5):
+//   rA[4] (bit 20) = D  — delay slot
+//   rA[3] (bit 19) = A  — absolute address
+//   rA[2] (bit 18) = L  — link (store PC+4 in rD)
 
 // BRI imm — relative, no delay slot
 def BRI : MBB<0x2E, (outs), (ins brtarget:$imm), "bri\t$imm", []> {
@@ -28,8 +28,8 @@ def BRI : MBB<0x2E, (outs), (ins brtarget:$imm), "bri\t$imm", []> {
 
 // BRID imm — relative, with delay slot
 def BRID : MBB<0x2E, (outs), (ins brtarget:$imm), "brid\t$imm", []> {
-  let rD = 0b10000; // delay-slot bit
-  let rA = 0b00000;
+  let rD = 0b00000;
+  let rA = 0b10000; // D at bit 20
   let isBranch    = 1;
   let isTerminator = 1;
   let isBarrier   = 1;
@@ -38,8 +38,8 @@ def BRID : MBB<0x2E, (outs), (ins brtarget:$imm), "brid\t$imm", []> {
 
 // BRAID imm — absolute, with delay slot
 def BRAID : MBB<0x2E, (outs), (ins calltarget:$imm), "braid\t$imm", []> {
-  let rD = 0b11000; // absolute | delay-slot
-  let rA = 0b00000;
+  let rD = 0b00000;
+  let rA = 0b11000; // D at bit 20, A at bit 19
   let isBranch    = 1;
   let isTerminator = 1;
   let isBarrier   = 1;

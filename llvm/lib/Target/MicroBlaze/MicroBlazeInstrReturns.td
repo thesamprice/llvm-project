@@ -46,35 +46,29 @@ def RTED : MBB<0x2D, (outs), (ins GPR:$rA, simm16:$imm),
 
 } // let hasSideEffects = 1
 
-// MBAR imm — memory barrier (opcode 0x2E, rD=0b00010, rA=0).  UG984 §2, §5.
-// imm selects the barrier scope:
-//   mbar 0 — full barrier; also clears the Branch Target Cache (BTC). Use only
-//             when a BTC flush is explicitly desired; prefer mbar 1 for ordinary
-//             data fences to avoid disrupting branch prediction performance.
-//   mbar 1 — data-side barrier (imm[0]=1): drains all pending data-memory
-//             operations before allowing subsequent memory accesses to proceed.
-//             Correct choice for acquire/release/seq_cst fences in C11 atomics.
-//   mbar 2 — instruction-side barrier (imm[1]=1): invalidates instruction cache
-//             lines in flight; needed after self-modifying code or JIT emission.
-//   mbar 3 — data + instruction barrier (imm[0]=1, imm[1]=1), no BTC flush.
-//   mbar 4 — synchronizing branch (equivalent to BRI 4); also clears the BTC.
+// MBAR sel — memory barrier (opcode 0x2E, UG984 §2, §5).
+// Encoding: [31:26]=0x2E  [25:21]=sel  [20:16]=0b00010  [15:0]=0x0004
+//   sel=0 — full barrier + BTC flush (use sparingly; disrupts branch prediction)
+//   sel=1 — data-side barrier (imm[0]=1): drains pending data-memory ops
+//   sel=2 — instruction-side barrier (imm[1]=1): flushes I-cache pipeline
+//   sel=3 — data + instruction barrier, no BTC flush
+//   sel=8 — BTC flush only
 //
-// BTC-after-branch hazard (UG984 §2):
-//   If mbar is placed immediately after any branch instruction in the physical
-//   instruction stream (including when the branch is taken), the BTC is cleared
-//   regardless of the immediate value.  This is a performance hazard, not a
-//   correctness issue: avoid placing mbar 0 or mbar 4 (BTC-clearing forms) in
-//   positions immediately following branch opcodes or their delay slots.
-//
-// hasSideEffects=1 serves two purposes: it models the hardware memory-barrier
-// side effects, and it sets MCID::UnmodeledSideEffects so that the delay-slot
-// filler's hasUnmodeledSideEffects() check correctly excludes MBAR from being
-// placed in a branch delay slot (UG984 §2 forbids only IMM, branch, and break
-// in delay slots; MBAR is technically allowed, but placing a fence in a delay
-// slot is semantically pointless and complicates reasoning).
-def MBAR : MBB<0x2E, (outs), (ins simm16:$imm), "mbar\t$imm", []> {
-  let rD = 0b00010;
-  let rA = 0b00000;
+// hasSideEffects=1 models the hardware memory-barrier side effects and also
+// sets MCID::UnmodeledSideEffects so the delay-slot filler excludes MBAR.
+
+// MBMBAR format: selector→rD[25:21], rA[20:16]=0b00010 fixed, imm=0x0004 fixed.
+// Per QEMU insns.decode line 186:
+//   mbar  101110 imm:5 00010 0000 0000 0000 0100
+class MBMBAR<dag outs, dag ins, string asmstr, list<dag> pattern>
+    : MBInst<outs, ins, asmstr, pattern, IIC_MBAR> {
+  bits<5> sel;
+  let Inst{31-26} = 0x2E;
+  let Inst{25-21} = sel;
+  let Inst{20-16} = 0b00010;
+  let Inst{15-0}  = 0x0004;
+}
+
+def MBAR : MBMBAR<(outs), (ins uimm5:$sel), "mbar\t$sel", []> {
   let hasSideEffects = 1;
-  let Itinerary = IIC_MBAR;
 }

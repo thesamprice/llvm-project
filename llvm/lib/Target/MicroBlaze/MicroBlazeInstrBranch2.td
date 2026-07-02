@@ -121,10 +121,10 @@ def BGED  : CBranchRD<0b10101, "bged">;
 // BRAI (absolute no delay), BRLID (relative link delay), BRKI (break imm).
 //===----------------------------------------------------------------------===//
 
-// BRAI imm — absolute branch to immediate, no delay  (rD=0b01000).
+// BRAI imm — absolute branch to immediate, no delay.  A-flag in rA[20:16].
 def BRAI  : MBB<0x2E, (outs), (ins calltarget:$imm), "brai\t$imm", []> {
-  let rD = 0b01000;
-  let rA = 0b00000;
+  let rD = 0b00000;
+  let rA = 0b01000;  // A at bit19; matches QEMU insns.decode and GAS
   let isBranch = 1; let isTerminator = 1; let isBarrier = 1;
 }
 

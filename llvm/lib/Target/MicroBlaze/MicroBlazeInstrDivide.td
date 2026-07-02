@@ -21,7 +21,10 @@ let Predicates = [HasDividePred] in {
   // UG984 §5: IDIV writes quotient to rD; rA is clobbered with remainder
   // (modeled via hasSideEffects above).  Only quotient (rD) is captured here;
   // ISD::SREM/UREM continue through __modsi3/__umodsi3 libcalls.
-  def : Pat<(sdiv i32:$rA, i32:$rB), (IDIV  GPR:$rA, GPR:$rB)>;
-  def : Pat<(udiv i32:$rA, i32:$rB), (IDIVU GPR:$rA, GPR:$rB)>;
+  //
+  // Hardware: idiv rD, rA, rB  →  rD = rB / rA.  DAG (sdiv A, B) = A/B, so
+  // we need rB=A (dividend) and rA=B (divisor): IDIV(rA=$rB, rB=$rA).
+  def : Pat<(sdiv i32:$rA, i32:$rB), (IDIV  GPR:$rB, GPR:$rA)>;
+  def : Pat<(udiv i32:$rA, i32:$rB), (IDIVU GPR:$rB, GPR:$rA)>;
 }
 

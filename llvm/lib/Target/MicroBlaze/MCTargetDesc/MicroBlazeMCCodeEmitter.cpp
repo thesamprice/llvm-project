@@ -65,6 +65,13 @@ public:
                          SmallVectorImpl<MCFixup> &Fixups,
                          const MCSubtargetInfo &STI) const;
 
+  // Encode the IMMW field for bsifi.
+  // GAS convention: bsifi rD, rA, width, shift → IMMW = shift + width - 1.
+  // The width operand is at OpNo; the shift (IMMS) operand is at OpNo+1.
+  unsigned getBSIFIImmWValue(const MCInst &MI, unsigned OpNo,
+                             SmallVectorImpl<MCFixup> &Fixups,
+                             const MCSubtargetInfo &STI) const;
+
   void encodeInstruction(const MCInst &MI, SmallVectorImpl<char> &CB,
                          SmallVectorImpl<MCFixup> &Fixups,
                          const MCSubtargetInfo &STI) const override;
@@ -123,6 +130,14 @@ unsigned MicroBlazeMCCodeEmitter::getMemOpValue(
     Fixups.push_back(MCFixup::create(0, Off.getExpr(),
                                      MCFixupKind(MicroBlaze::FIXUP_MICROBLAZE_32)));
   return (BaseReg << 16) | Offset;
+}
+
+unsigned MicroBlazeMCCodeEmitter::getBSIFIImmWValue(
+    const MCInst &MI, unsigned OpNo, SmallVectorImpl<MCFixup> &Fixups,
+    const MCSubtargetInfo &STI) const {
+  unsigned Width = MI.getOperand(OpNo).getImm();
+  unsigned Shift = MI.getOperand(OpNo + 1).getImm();
+  return (Shift + Width - 1) & 0x1F;
 }
 
 // Determine if MI is a Type B instruction with an operand requiring an IMM

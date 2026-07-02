@@ -9,6 +9,7 @@
 #include "MCTargetDesc/MicroBlazeMCTargetDesc.h"
 #include "TargetInfo/MicroBlazeTargetInfo.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
@@ -172,6 +173,29 @@ ParseStatus MicroBlazeAsmParser::tryParseRegister(MCRegister &Reg,
   return ParseStatus::Success;
 }
 
+// Map named SPR identifiers (used with mfs/mts) to their 14-bit addresses.
+// GAS accepts these names; without this table, rmsr/rear/etc. would fall
+// through to parseExpression as undefined symbols producing value 0.
+static int64_t matchSprName(StringRef Name) {
+  return StringSwitch<int64_t>(Name)
+    .Case("rpc",    0x0000)
+    .Case("rmsr",   0x0001)
+    .Case("rear",   0x0003)
+    .Case("resr",   0x0005)
+    .Case("rfsr",   0x0007)
+    .Case("rbtr",   0x000B)
+    .Case("redr",   0x000D)
+    .Case("rslr",   0x0800)
+    .Case("rshr",   0x0802)
+    .Case("rpid",   0x1000)
+    .Case("rzpr",   0x1001)
+    .Case("rtlbx",  0x1002)
+    .Case("rtlblo", 0x1003)
+    .Case("rtlbhi", 0x1004)
+    .Case("rtlbsx", 0x1005)
+    .Default(-1);
+}
+
 bool MicroBlazeAsmParser::parseOperand(OperandVector &Operands) {
   SMLoc S = Parser.getTok().getLoc();
   SMLoc E;
@@ -181,6 +205,19 @@ bool MicroBlazeAsmParser::parseOperand(OperandVector &Operands) {
   if (tryParseRegister(Reg, S, E).isSuccess()) {
     Operands.push_back(MicroBlazeOperand::createReg(Reg, S, E));
     return false;
+  }
+
+  // Named SPR (rmsr, rpc, rear, …)?
+  if (Parser.getTok().is(AsmToken::Identifier)) {
+    StringRef Name = Parser.getTok().getString();
+    int64_t Addr = matchSprName(Name);
+    if (Addr >= 0) {
+      E = Parser.getTok().getEndLoc();
+      Parser.Lex();
+      const MCExpr *Val = MCConstantExpr::create(Addr, Parser.getContext());
+      Operands.push_back(MicroBlazeOperand::createImm(Val, S, E));
+      return false;
+    }
   }
 
   // Immediate or expression.

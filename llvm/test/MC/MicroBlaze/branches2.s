@@ -136,12 +136,12 @@
 # Missing Type B unconditional — opcode 0x2E  (adds BRAI, BRLID, BRKI)
 #------------------------------------------------------------------------------
 
-# brai 256 — opcode=0x2E=101110, rD=0b01000=8, rA=0, imm=256=0x100
-# byte3: 1,0,1,1,1,0,0,1 = 0xB9
-# byte2: rD[2:0]=0,0,0; rA=0,0,0,0,0 → 0b00000000 = 0x00
+# brai 256 — opcode=0x2E=101110, rD=0b00000=0, rA=0b01000 (A at bit19), imm=256=0x100
+# byte3: 1,0,1,1,1,0,0,0 = 0xB8
+# byte2: rD[2:0]=0,0,0; rA=0,1,0,0,0 → 0b00001000 = 0x08
 # imm=0x0100; byte1=0x01, byte0=0x00
-# LE: 00 01 00 B9
-# CHECK: brai 256                    # encoding: [0x00,0x01,0x00,0xb9]
+# LE: 00 01 08 B8
+# CHECK: brai 256                    # encoding: [0x00,0x01,0x08,0xb8]
   brai 256
 
 # brlid r15, 8 — rD=r15=15=0b01111, rA=0b10100=20, imm=8
@@ -210,14 +210,14 @@
 # CHECK: bri 8                        # encoding: [0x08,0x00,0x00,0xb8]
   bri 8
 
-# brid 8 — delay slot, no absolute, no link; rD=0b10000=16
-# Word: 0xBA000008  LE: 08 00 00 BA
-# CHECK: brid 8                       # encoding: [0x08,0x00,0x00,0xba]
+# brid 8 — delay slot, no absolute, no link; rD=0, rA=0b10000 (D at bit20)
+# Word: 0xB8100008  LE: 08 00 10 B8
+# CHECK: brid 8                       # encoding: [0x08,0x00,0x10,0xb8]
   brid 8
 
-# braid 8 — absolute + delay, no link; rD=0b11000=24
-# Word: 0xBB000008  LE: 08 00 00 BB
-# CHECK: braid 8                      # encoding: [0x08,0x00,0x00,0xbb]
+# braid 8 — absolute + delay, no link; rD=0, rA=0b11000 (D+A at bits[20:19])
+# Word: 0xB8180008  LE: 08 00 18 B8
+# CHECK: braid 8                      # encoding: [0x08,0x00,0x18,0xb8]
   braid 8
 
 # bralid r15, 8 — absolute + link + delay; rD=r15=15, rA=0b11100=28

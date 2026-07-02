@@ -63,6 +63,15 @@ public:
 
   std::string_view getClobbers() const override { return ""; }
 
+  // The MicroBlaze ABI aligns int64_t / double to 4 bytes (see LongLongAlign /
+  // DoubleAlign above and the i64:32 / f64:32 data-layout entries).  Clang's
+  // default would otherwise bump the *preferred* alignment of these types to
+  // their natural 8-byte size, producing `alloca align 8`.  The backend's
+  // 4-byte-aligned stack frames do not honor that, so an 8-aligned alloca lets
+  // the optimizer fold `&x + 4` into `&x | 4` and miscompile 64-bit stores.
+  // Keep preferred alignment equal to the (4-byte) ABI alignment.
+  bool allowsLargerPreferedTypeAlignment() const override { return false; }
+
   bool hasBitIntType() const override { return true; }
 };
 

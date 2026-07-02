@@ -13,6 +13,14 @@ def uimm5 : Operand<i32>, ImmLeaf<i32, [{return Imm >= 0 && Imm < 32;}]> {
   let OperandType = "OPERAND_IMMEDIATE";
 }
 
+// Width operand for bsifi (insert field).
+// GAS convention: bsifi rD, rA, width, shift → hardware IMMW = shift+width-1.
+// The custom encoder translates the user-visible width into the raw IMMW.
+def bsifi_width : Operand<i32>, ImmLeaf<i32, [{return Imm >= 1 && Imm <= 32;}]> {
+  let OperandType = "OPERAND_IMMEDIATE";
+  let EncoderMethod = "getBSIFIImmWValue";
+}
+
 //===----------------------------------------------------------------------===//
 // Barrel-shift immediate and field instructions (require +barrel-shift, opcode 0x19)
 // UG984 §5 Fig 82. Not Type B — a preceding imm prefix has no effect on these.
@@ -43,6 +51,6 @@ let Predicates = [HasBarrelShiftPred] in {
   // BSIFI: insert field; IMMW = shift + width - 1 per assembler convention.
   def BSEFI : MBBSF<0, 1, (outs GPR:$rD), (ins GPR:$rA, uimm5:$immw, uimm5:$imms),
                     "bsefi\t$rD, $rA, $immw, $imms", []>;
-  def BSIFI : MBBSF<1, 0, (outs GPR:$rD), (ins GPR:$rA, uimm5:$immw, uimm5:$imms),
+  def BSIFI : MBBSF<1, 0, (outs GPR:$rD), (ins GPR:$rA, bsifi_width:$immw, uimm5:$imms),
                     "bsifi\t$rD, $rA, $immw, $imms", []>;
 }
