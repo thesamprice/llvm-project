@@ -58,6 +58,16 @@ def FeatureFSL : SubtargetFeature<"fsl", "HasFSL",
 def FeatureAreaOptimized : SubtargetFeature<"area-optimized", "HasAreaOptimized",
     "true", "Schedule for the 3-stage area-optimized pipeline (C_AREA_OPTIMIZED=1)">;
 
+// C_USE_BRANCH_TARGET_CACHE=1: assume a branch target cache is present.  With a
+// BTC, a correctly predicted immediate branch or return incurs no refill
+// overhead (UG984 Ch.2 "Branch Target Cache"), so the delay-slot filler prefers
+// demoting an unfilled immediate branch over keeping the D-form + a wasted NOP.
+// Only valid on the 5-/8-stage pipeline (the BTC does not exist with
+// C_AREA_OPTIMIZED=1); see MicroBlazeDelaySlotFiller.cpp preferNopOverDemote.
+def FeatureBranchTargetCache : SubtargetFeature<"branch-target-cache",
+    "HasBranchTargetCache", "true",
+    "Assume a branch target cache is present (C_USE_BRANCH_TARGET_CACHE=1)">;
+
 //===----------------------------------------------------------------------===//
 // Register file, Calling Conv, Instruction Descriptions (added in later commits)
 //===----------------------------------------------------------------------===//

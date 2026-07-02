@@ -403,6 +403,25 @@ protected:
                 ->isSafeInLoadDelaySlot(Filler, Load);
   }
 
+  // When no filler is found, choose keep-D+NOP vs demote-to-non-D.
+  //
+  // The base heuristic keeps the D-form + a NOP for backward (taken-heavy loop
+  // back-edge) branches and demotes forward ones.  With a branch target cache
+  // (UG984 Ch.2 "Branch Target Cache"), a correctly predicted immediate branch
+  // has its refill hidden, so the D-form saves nothing and the NOP is a wasted
+  // cycle every iteration — demote instead.  A backward branch always has an
+  // immediate (MBB) target, which the BTC predicts; register/indirect branches
+  // (never predicted) have no MBB operand, so IsBackward is false for them and
+  // they keep the base behavior.  The BTC does not exist on the 3-stage area
+  // pipeline, so the !hasAreaOptimized() guard ignores that impossible combo.
+  bool preferNopOverDemote(const MachineInstr &Br,
+                           bool IsBackward) const override {
+    const auto &STI = Br.getMF()->getSubtarget<MicroBlazeSubtarget>();
+    if (IsBackward && STI.hasBranchTargetCache() && !STI.hasAreaOptimized())
+      return false; // BTC hides the refill → demote to the no-delay form
+    return DelaySlotFiller::preferNopOverDemote(Br, IsBackward);
+  }
+
   // MicroBlaze-specific transforms that expose delay-slot opportunities.
   bool runPreFillTransforms(MachineFunction &MF) override {
     bool Changed = false;

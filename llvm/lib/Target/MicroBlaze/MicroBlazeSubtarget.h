@@ -41,6 +41,7 @@ class MicroBlazeSubtarget : public MicroBlazeGenSubtargetInfo {
   bool HasExtendedAddr = false;
   bool HasFSL = false;
   bool HasAreaOptimized = false;
+  bool HasBranchTargetCache = false;
 
   SelectionDAGTargetInfo TSI;
   MicroBlazeInstrInfo InstrInfo;
@@ -82,6 +83,7 @@ public:
   bool hasExtendedAddr() const { return HasExtendedAddr; }
   bool hasFSL() const { return HasFSL; }
   bool hasAreaOptimized() const { return HasAreaOptimized; }
+  bool hasBranchTargetCache() const { return HasBranchTargetCache; }
 
   void initLibcallLoweringInfo(LibcallLoweringInfo &Info) const override;
 };
