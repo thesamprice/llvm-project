@@ -143,7 +143,10 @@ class MBBSI<bit S, bit T, dag outs, dag ins, string asmstr, list<dag> pattern,
 // BSEFI/BSIFI — barrel-shift field extract/insert (opcode 0x19, UG984 §5 Fig 82)
 //   [31:26]=0x19  [25:21]=rD  [20:16]=rA  [15]=I  [14]=E  [13:11]=0
 //   [10:6]=IMMW  [5]=0  [4:0]=IMMS
-// E=1: extract field; I=1: insert field; IMMW=end bit index, IMMS=shift amount.
+// E=1: extract (BSEFI); I=1: insert (BSIFI).
+// Encoding is ASYMMETRIC (matches GAS / hardware):
+//   BSEFI: IMMW = WIDTH (number of bits to extract), IMMS = start bit
+//   BSIFI: IMMW = end bit (start+width-1),           IMMS = start bit
 //===----------------------------------------------------------------------===//
 class MBBSF<bit I, bit E, dag outs, dag ins, string asmstr, list<dag> pattern,
             list<SchedReadWrite> sched = [WriteALU]>

@@ -115,6 +115,104 @@ bool MicroBlazeDAGToDAGISel::SelectFSLImm(SDValue N, SDValue &Port) {
 }
 
 //===----------------------------------------------------------------------===//
+// Bit-field extract / insert selectors
+//===----------------------------------------------------------------------===//
+
+// Match (and (lshr x, c_shift), c_mask) → BSEFI rD, rA, immw, imms
+// GAS / hardware encoding for BSEFI: bits[10:6] = WIDTH, bits[4:0] = START.
+// The operand we pass as $immw is therefore the field WIDTH (number of bits),
+// not the end-bit index.  (BSIFI is asymmetric: it stores end-bit in the same
+// field; its getBSIFIImmWValue encoder converts width→end-bit.)
+// Only fire when shift > 0: shift=0 with a small mask is already one ANDI.
+bool MicroBlazeDAGToDAGISel::tryBSEFI(SDNode *N) {
+  if (!Subtarget->hasBarrelShift())
+    return false;
+  if (N->getOpcode() != ISD::AND)
+    return false;
+  auto *MaskC = dyn_cast<ConstantSDNode>(N->getOperand(1));
+  if (!MaskC)
+    return false;
+  uint64_t Mask = MaskC->getZExtValue();
+  // Mask must be a non-zero contiguous run of low bits: mask & (mask+1) == 0.
+  if (!Mask || (Mask & (Mask + 1)) != 0)
+    return false;
+  SDValue Src = N->getOperand(0);
+  if (Src.getOpcode() != ISD::SRL)
+    return false;
+  auto *ShiftC = dyn_cast<ConstantSDNode>(Src.getOperand(1));
+  if (!ShiftC)
+    return false;
+  unsigned Shift = ShiftC->getZExtValue();
+  if (Shift == 0)
+    return false;
+  unsigned Width = llvm::popcount(Mask);
+  if (Shift + Width > 32)
+    return false;
+  SDLoc DL(N);
+  SDValue Ops[] = {
+      Src.getOperand(0),
+      CurDAG->getTargetConstant(Width, DL, MVT::i32),
+      CurDAG->getTargetConstant(Shift, DL, MVT::i32),
+  };
+  CurDAG->SelectNodeTo(N, MicroBlaze::BSEFI, MVT::i32, Ops);
+  return true;
+}
+
+// Match (or (and base, inv_placed_mask) (shl src shift)) → BSIFI rD, rA, width, shift
+// BSIFI inserts rA[width-1:0] into rD[shift+width-1:shift], preserving other bits.
+// inv_placed_mask must be the bitwise inversion of a contiguous shifted field.
+bool MicroBlazeDAGToDAGISel::tryBSIFI(SDNode *N) {
+  if (!Subtarget->hasBarrelShift())
+    return false;
+  if (N->getOpcode() != ISD::OR)
+    return false;
+  // Identify (and base, inv_mask) and the shifted-value operand.
+  SDValue AndOp, InsertedOp;
+  if (N->getOperand(0).getOpcode() == ISD::AND) {
+    AndOp = N->getOperand(0);
+    InsertedOp = N->getOperand(1);
+  } else if (N->getOperand(1).getOpcode() == ISD::AND) {
+    AndOp = N->getOperand(1);
+    InsertedOp = N->getOperand(0);
+  } else {
+    return false;
+  }
+  auto *InvMaskC = dyn_cast<ConstantSDNode>(AndOp.getOperand(1));
+  if (!InvMaskC)
+    return false;
+  uint64_t PlacedMask = ~InvMaskC->getZExtValue() & 0xFFFFFFFFULL;
+  // PlacedMask must be a contiguous shifted field (not zero, not all-ones).
+  if (!PlacedMask || PlacedMask == 0xFFFFFFFFULL)
+    return false;
+  if (!isShiftedMask_32(static_cast<uint32_t>(PlacedMask)))
+    return false;
+  unsigned Shift = llvm::countr_zero(PlacedMask);
+  unsigned Width = llvm::popcount(PlacedMask);
+  // The value to insert must be (shl src, Shift).
+  if (InsertedOp.getOpcode() != ISD::SHL)
+    return false;
+  auto *ShlC = dyn_cast<ConstantSDNode>(InsertedOp.getOperand(1));
+  if (!ShlC || ShlC->getZExtValue() != Shift)
+    return false;
+  SDValue BaseVal = AndOp.getOperand(0);
+  SDValue SrcVal = InsertedOp.getOperand(0);
+  // Operand order matches the tied-register BSIFI definition:
+  //   $rD_src = BaseVal (tied to output $rD — the register to insert into)
+  //   $rA     = SrcVal  (low Width bits are inserted)
+  //   $immw   = Width   (encoder computes IMMW = shift + width - 1)
+  //   $imms   = Shift
+  SDLoc DL(N);
+  SDValue Ops[] = {
+      BaseVal,
+      SrcVal,
+      CurDAG->getTargetConstant(Width, DL, MVT::i32),
+      CurDAG->getTargetConstant(Shift, DL, MVT::i32),
+  };
+  CurDAG->SelectNodeTo(N, MicroBlaze::BSIFI, MVT::i32, Ops);
+  return true;
+}
+
+//===----------------------------------------------------------------------===//
 // Select dispatch
 //===----------------------------------------------------------------------===//
 
@@ -301,6 +399,11 @@ void MicroBlazeDAGToDAGISel::Select(SDNode *Node) {
     ReplaceNode(Node, Selected);
     return;
   }
+
+  if (Node->getOpcode() == ISD::AND && tryBSEFI(Node))
+    return;
+  if (Node->getOpcode() == ISD::OR && tryBSIFI(Node))
+    return;
 
   SelectCode(Node);
 }

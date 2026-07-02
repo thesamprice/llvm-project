@@ -48,6 +48,9 @@ public:
   // which then select the dynamic (port-in-GPR) form.  See MicroBlazeInstrFSL.td.
   bool SelectFSLImm(SDValue N, SDValue &Port);
 
+  bool tryBSEFI(SDNode *N);
+  bool tryBSIFI(SDNode *N);
+
   void Select(SDNode *Node) override;
 
 // Auto-generated instruction selector (SelectCode, CheckPatternPredicate, …).
