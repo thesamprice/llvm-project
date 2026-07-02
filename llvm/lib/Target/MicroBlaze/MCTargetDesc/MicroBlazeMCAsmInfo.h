@@ -13,9 +13,9 @@
 
 namespace llvm {
 
-class MCSpecifierExpr;
 class Triple;
 class MCTargetOptions;
+class MCSpecifierExpr;
 
 class MicroBlazeMCAsmInfo : public MCAsmInfoELF {
   void anchor() override;

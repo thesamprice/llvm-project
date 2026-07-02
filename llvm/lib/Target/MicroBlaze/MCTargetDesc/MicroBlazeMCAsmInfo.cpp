@@ -29,7 +29,7 @@ MicroBlazeMCAsmInfo::MicroBlazeMCAsmInfo(const Triple & /*TheTriple*/,
 }
 
 void MicroBlazeMCAsmInfo::printSpecifierExpr(raw_ostream &OS,
-                                             const MCSpecifierExpr &Expr) const {
+                                              const MCSpecifierExpr &Expr) const {
   printExpr(OS, *Expr.getSubExpr());
   switch (Expr.getSpecifier()) {
   case ELF::R_MICROBLAZE_GOT_64:

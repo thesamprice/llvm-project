@@ -1,6 +1,5 @@
 ; RUN: llc -mtriple=microblazeel-unknown-elf -relocation-model=pic -O1 < %s | FileCheck %s --check-prefix=PIC
 ; RUN: llc -mtriple=microblazeel-unknown-elf -relocation-model=static -O1 < %s | FileCheck %s --check-prefix=STATIC
-; REQUIRES: microblaze-registered-target
 
 ; In PIC mode, global variable addresses come from the GOT via R20 (the GOT base register).
 ; In static mode, global addresses are materialised directly with addik.

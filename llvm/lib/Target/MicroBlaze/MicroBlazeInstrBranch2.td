@@ -67,7 +67,11 @@ def : Pat<(MBCall GPR:$callee), (BRALD R15, GPR:$callee)>;
 
 // BRK rD, rB — software break; enters break handler; rD ← PC+4  (rA=0b01100).
 // Control transfers to the break handler and never returns to the next
-// instruction, so isBarrier=1.  hasSideEffects=1: modifies BTR and MSR.BIP.
+// instruction, so isBarrier=1.  hasSideEffects=1 serves double duty: it
+// models the architectural side effects (writes BTR and sets MSR.BIP), and
+// it sets MCID::UnmodeledSideEffects so that the delay slot filler's
+// hasUnmodeledSideEffects() check correctly excludes BRK from delay slots
+// per UG984 §2 (break instructions are forbidden in delay slots).
 def BRK   : MBA<0x26, 0, (outs), (ins GPR:$rD, GPR:$rB),
                 "brk\t$rD, $rB", []> {
   let rA = 0b01100;
@@ -133,6 +137,8 @@ def BRLID : MBB<0x2E, (outs), (ins GPR:$rD, brtarget:$imm),
 
 // BRKI rD, imm — break to immediate; rD ← PC+4  (rA=0b01100).
 // Same semantics as BRK: transfers to break handler, never falls through.
+// hasSideEffects=1 and the calltarget immediate (→ MO_GlobalAddress, caught by
+// needsImmPrefix) doubly exclude BRKI from delay slots per UG984 §2.
 def BRKI  : MBB<0x2E, (outs), (ins GPR:$rD, calltarget:$imm),
                 "brki\t$rD, $imm", []> {
   let rA = 0b01100;

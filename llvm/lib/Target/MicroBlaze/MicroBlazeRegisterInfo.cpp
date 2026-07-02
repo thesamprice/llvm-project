@@ -62,7 +62,7 @@ MicroBlazeRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   // R21 — reserved by GCC alongside R20 for PIC/SDA anchoring.
   Reserved.set(MicroBlaze::R21);
 
-  // R19 is the frame pointer; only reserved when actually in use.
+  // R19 — only reserved when the frame pointer is actually in use.
   if (MF.getSubtarget<MicroBlazeSubtarget>().getFrameLowering()->hasFP(MF))
     Reserved.set(MicroBlaze::R19);
 

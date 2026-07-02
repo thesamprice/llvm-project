@@ -16,6 +16,13 @@
 
 using namespace llvm;
 
+// Pull in register and instruction enum values so the PRINT_ALIAS_INSTR block
+// in MicroBlazeGenAsmWriter.inc can reference MicroBlaze::R0, MicroBlaze::ADDIK, etc.
+#define GET_REGINFO_ENUM
+#include "MicroBlazeGenRegisterInfoEnums.inc"
+#define GET_INSTRINFO_ENUM
+#include "MicroBlazeGenInstrInfo.inc"
+
 #define PRINT_ALIAS_INSTR
 #include "MicroBlazeGenAsmWriter.inc"
 

@@ -86,21 +86,21 @@ def LBU  : MBA<0x30, 0, (outs GPR:$rD), (ins memrr:$addr),
 let mayLoad = 1, hasSideEffects = 0 in {
 
 def LWR  : MBA<0x32, 0x200, (outs GPR:$rD), (ins memrr:$addr),
-               "lwr\t$rD, $addr", []> {
+               "lwr\t$rD, $addr", [], IIC_LD> {
   bits<10> addr;
   let rA = addr{9-5};
   let rB = addr{4-0};
 }
 
 def LHUR : MBA<0x31, 0x200, (outs GPR:$rD), (ins memrr:$addr),
-               "lhur\t$rD, $addr", []> {
+               "lhur\t$rD, $addr", [], IIC_LD> {
   bits<10> addr;
   let rA = addr{9-5};
   let rB = addr{4-0};
 }
 
 def LBUR : MBA<0x30, 0x200, (outs GPR:$rD), (ins memrr:$addr),
-               "lbur\t$rD, $addr", []> {
+               "lbur\t$rD, $addr", [], IIC_LD> {
   bits<10> addr;
   let rA = addr{9-5};
   let rB = addr{4-0};
@@ -116,21 +116,21 @@ def LBUR : MBA<0x30, 0x200, (outs GPR:$rD), (ins memrr:$addr),
 let mayStore = 1, hasSideEffects = 0 in {
 
 def SWR  : MBA<0x36, 0x200, (outs), (ins GPR:$rD, memrr:$addr),
-               "swr\t$rD, $addr", []> {
+               "swr\t$rD, $addr", [], IIC_ST> {
   bits<10> addr;
   let rA = addr{9-5};
   let rB = addr{4-0};
 }
 
 def SHR  : MBA<0x35, 0x200, (outs), (ins GPR:$rD, memrr:$addr),
-               "shr\t$rD, $addr", []> {
+               "shr\t$rD, $addr", [], IIC_ST> {
   bits<10> addr;
   let rA = addr{9-5};
   let rB = addr{4-0};
 }
 
 def SBR  : MBA<0x34, 0x200, (outs), (ins GPR:$rD, memrr:$addr),
-               "sbr\t$rD, $addr", []> {
+               "sbr\t$rD, $addr", [], IIC_ST> {
   bits<10> addr;
   let rA = addr{9-5};
   let rB = addr{4-0};
@@ -147,21 +147,21 @@ def SBR  : MBA<0x34, 0x200, (outs), (ins GPR:$rD, memrr:$addr),
 let Predicates = [HasExtendedAddrPred], mayLoad = 1, hasSideEffects = 0 in {
 
 def LWEA  : MBA<0x32, 0x080, (outs GPR:$rD), (ins memrr:$addr),
-                "lwea\t$rD, $addr", []> {
+                "lwea\t$rD, $addr", [], IIC_LD> {
   bits<10> addr;
   let rA = addr{9-5};
   let rB = addr{4-0};
 }
 
 def LHUEA : MBA<0x31, 0x080, (outs GPR:$rD), (ins memrr:$addr),
-                "lhuea\t$rD, $addr", []> {
+                "lhuea\t$rD, $addr", [], IIC_LD> {
   bits<10> addr;
   let rA = addr{9-5};
   let rB = addr{4-0};
 }
 
 def LBUEA : MBA<0x30, 0x080, (outs GPR:$rD), (ins memrr:$addr),
-                "lbuea\t$rD, $addr", []> {
+                "lbuea\t$rD, $addr", [], IIC_LD> {
   bits<10> addr;
   let rA = addr{9-5};
   let rB = addr{4-0};
@@ -176,21 +176,21 @@ def LBUEA : MBA<0x30, 0x080, (outs GPR:$rD), (ins memrr:$addr),
 let Predicates = [HasExtendedAddrPred], mayStore = 1, hasSideEffects = 0 in {
 
 def SWEA  : MBA<0x36, 0x080, (outs), (ins GPR:$rD, memrr:$addr),
-                "swea\t$rD, $addr", []> {
+                "swea\t$rD, $addr", [], IIC_ST> {
   bits<10> addr;
   let rA = addr{9-5};
   let rB = addr{4-0};
 }
 
 def SHEA  : MBA<0x35, 0x080, (outs), (ins GPR:$rD, memrr:$addr),
-                "shea\t$rD, $addr", []> {
+                "shea\t$rD, $addr", [], IIC_ST> {
   bits<10> addr;
   let rA = addr{9-5};
   let rB = addr{4-0};
 }
 
 def SBEA  : MBA<0x34, 0x080, (outs), (ins GPR:$rD, memrr:$addr),
-                "sbea\t$rD, $addr", []> {
+                "sbea\t$rD, $addr", [], IIC_ST> {
   bits<10> addr;
   let rA = addr{9-5};
   let rB = addr{4-0};

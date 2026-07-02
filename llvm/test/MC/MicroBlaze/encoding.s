@@ -115,3 +115,62 @@
 # LE bytes: 00 00 24 BE
 # CHECK: bneid r4, 0                 # encoding: [0x00,0x00,0x24,0xbe]
   bneid r4, 0
+
+# bltid r4, 0 — rD=0b10010=18 (LT + delay)
+# Word: 0xBE440000  LE: 00 00 44 BE
+# CHECK: bltid r4, 0                 # encoding: [0x00,0x00,0x44,0xbe]
+  bltid r4, 0
+
+# bleid r4, 0 — rD=0b10011=19 (LE + delay)
+# Word: 0xBE640000  LE: 00 00 64 BE
+# CHECK: bleid r4, 0                 # encoding: [0x00,0x00,0x64,0xbe]
+  bleid r4, 0
+
+# bgtid r4, 0 — rD=0b10100=20 (GT + delay)
+# Word: 0xBE840000  LE: 00 00 84 BE
+# CHECK: bgtid r4, 0                 # encoding: [0x00,0x00,0x84,0xbe]
+  bgtid r4, 0
+
+# bgeid r4, 0 — rD=0b10101=21 (GE + delay)
+# Word: 0xBEA40000  LE: 00 00 A4 BE
+# CHECK: bgeid r4, 0                 # encoding: [0x00,0x00,0xa4,0xbe]
+  bgeid r4, 0
+
+#------------------------------------------------------------------------------
+# Additional Type B memory and arithmetic instructions
+#------------------------------------------------------------------------------
+
+# lbui r3, r5, 42  — load byte unsigned immediate; opcode=0x38
+# Word: 0b111000_00011_00101_0000000000101010 = 0xE065002A  LE: 2A 00 65 E0
+# CHECK: lbui r3, r5, 42             # encoding: [0x2a,0x00,0x65,0xe0]
+  lbui r3, r5, 42
+
+# lhui r3, r5, 42  — load halfword unsigned immediate; opcode=0x39
+# Word: 0xE465002A  LE: 2A 00 65 E4
+# CHECK: lhui r3, r5, 42             # encoding: [0x2a,0x00,0x65,0xe4]
+  lhui r3, r5, 42
+
+# sbi r3, r5, 42  — store byte immediate; opcode=0x3C
+# Word: 0xF065002A  LE: 2A 00 65 F0
+# CHECK: sbi r3, r5, 42              # encoding: [0x2a,0x00,0x65,0xf0]
+  sbi r3, r5, 42
+
+# shi r3, r5, 42  — store halfword immediate; opcode=0x3D
+# Word: 0xF465002A  LE: 2A 00 65 F4
+# CHECK: shi r3, r5, 42              # encoding: [0x2a,0x00,0x65,0xf4]
+  shi r3, r5, 42
+
+# xori r3, r5, 42  — XOR immediate; opcode=0x2A
+# Word: 0xA865002A  LE: 2A 00 65 A8
+# CHECK: xori r3, r5, 42             # encoding: [0x2a,0x00,0x65,0xa8]
+  xori r3, r5, 42
+
+# rsubk r3, r5, r7  — reverse subtract keep carry; opcode=0x05, func=0
+# Word: 0x14653800  LE: 00 38 65 14
+# CHECK: rsubk r3, r5, r7            # encoding: [0x00,0x38,0x65,0x14]
+  rsubk r3, r5, r7
+
+# rsubik r3, r5, 42  — reverse subtract immediate keep carry; opcode=0x0D
+# Word: 0x3465002A  LE: 2A 00 65 34
+# CHECK: rsubik r3, r5, 42           # encoding: [0x2a,0x00,0x65,0x34]
+  rsubik r3, r5, 42

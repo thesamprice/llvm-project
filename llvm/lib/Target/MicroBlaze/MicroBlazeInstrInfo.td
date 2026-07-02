@@ -94,8 +94,8 @@ def memri : Operand<iPTR> {
 // Memory address: base register + index register (for ld/st register).
 def memrr : Operand<iPTR> {
   let PrintMethod  = "printMemOperandRR";
-  let MIOperandInfo = (ops GPR:$base, GPR:$index);
   let EncoderMethod = "getMemOpValue";
+  let MIOperandInfo = (ops GPR:$base, GPR:$index);
   let DecoderMethod = "decodeMemRROperand";
 }
 
@@ -155,6 +155,25 @@ include "MicroBlazeInstrFPU.td"
 include "MicroBlazeInstrFSL.td"
 
 //===----------------------------------------------------------------------===//
+// PIC GOT access — LA_GOT
+//===----------------------------------------------------------------------===//
+// Loads the address of a global symbol from the GOT via R20 (GOT base).
+// Encoding: opcode=0x3A (LWI), rA=20 (R20 hardcoded), imm16=LO16(got_off).
+// The MCCodeEmitter prepends an IMM prefix with FIXUP_MICROBLAZE_GOT_64.
+// R_MICROBLAZE_GOT_64 patches the IMM+LWI pair so the linker fills in the
+// GOT-relative offset of the symbol's entry.
+let hasSideEffects = 0, mayLoad = 1, isReMaterializable = 1 in
+def LA_GOT : MBB<0x3A, (outs GPR:$rD), (ins i32imm:$offset),
+                  "la_got\t$rD, $offset", [], IIC_LD> {
+  bits<16> offset;
+  let rA  = 20;      // R20 is the GOT base (hardcoded)
+  let imm = offset;
+}
+
+def : Pat<(i32 (MBGOTLoad tglobaladdr:$sym)),   (LA_GOT tglobaladdr:$sym)>;
+def : Pat<(i32 (MBGOTLoad texternalsym:$sym)),   (LA_GOT texternalsym:$sym)>;
+
+//===----------------------------------------------------------------------===//
 // Assembler aliases (no new opcodes — expand to existing instructions)
 //===----------------------------------------------------------------------===//
 
@@ -184,23 +203,3 @@ def : InstAlias<"tuqula\t$rD", (ADDIK GPR:$rD, R0, 42), 0>;
 def : InstAlias<"hibernate", (MBAR 8), 0>;
 def : InstAlias<"sleep",     (MBAR 16), 0>;
 def : InstAlias<"suspend",   (MBAR 24), 0>;
-
-//===----------------------------------------------------------------------===//
-// PIC GOT access — LA_GOT
-//===----------------------------------------------------------------------===//
-// Loads the address of a global symbol from the GOT via R20 (GOT base).
-// Encoding: opcode=0x3A (LWI), rA=20 (R20 hardcoded), imm16=LO16(got_off).
-// The MCCodeEmitter prepends an IMM prefix with FIXUP_MICROBLAZE_GOT_64.
-// R_MICROBLAZE_GOT_64 patches the IMM+LWI pair so the linker fills in the
-// GOT-relative offset of the symbol's entry.
-let hasSideEffects = 0, mayLoad = 1, isReMaterializable = 1 in
-def LA_GOT : MBB<0x3A, (outs GPR:$rD), (ins i32imm:$offset),
-                  "la_got\t$rD, $offset", [], IIC_LD> {
-  bits<16> offset;
-  let rA  = 20;      // R20 is the GOT base (hardcoded)
-  let imm = offset;
-}
-
-def : Pat<(i32 (MBGOTLoad tglobaladdr:$sym)),  (LA_GOT tglobaladdr:$sym)>;
-def : Pat<(i32 (MBGOTLoad texternalsym:$sym)),  (LA_GOT texternalsym:$sym)>;
-

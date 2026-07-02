@@ -20,7 +20,7 @@ def uimm15 : Operand<i32> {
 //===----------------------------------------------------------------------===//
 // Special-purpose register move instructions (opcode 0x25, UG984 §5 Figs 105-108)
 // All have opcode 0x25; the fixed bits in [20:14] distinguish MFS, MTS, and
-// MSRSET/MSRCLR from each other.  Latency: 2 cycles for all four (UG984 §5).
+// MSRSET/MSRCLR from each other.  Latency: 1 cycle for all four.
 //
 // SPR address field (14 bits) encodes the special register:
 //   0x0000 = PC    0x0001 = MSR   0x0003 = EAR   0x0005 = ESR

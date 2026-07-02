@@ -147,7 +147,6 @@ def LI32 : MBPseudo<(outs GPR:$rD), (ins i32imm:$imm),
   let isReMaterializable = 1;
 }
 
-
 // Barrel-shift
 let Predicates = [HasBarrelShiftPred] in {
   def : Pat<(srl i32:$ra, i32:$rb), (BSRL GPR:$ra, GPR:$rb)>;

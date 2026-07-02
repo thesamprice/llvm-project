@@ -200,3 +200,55 @@
 # LE: 00 00 A4 BC
 # CHECK: bgei r4, 0                  # encoding: [0x00,0x00,0xa4,0xbc]
   bgei r4, 0
+
+#------------------------------------------------------------------------------
+# Opcode 0x2E — remaining Type B unconditional forms
+#------------------------------------------------------------------------------
+
+# bri 8 — no link, no absolute, no delay; rD=0b00000=0, rA=0
+# Word: 0xB8000008  LE: 08 00 00 B8
+# CHECK: bri 8                        # encoding: [0x08,0x00,0x00,0xb8]
+  bri 8
+
+# brid 8 — delay slot, no absolute, no link; rD=0b10000=16
+# Word: 0xBA000008  LE: 08 00 00 BA
+# CHECK: brid 8                       # encoding: [0x08,0x00,0x00,0xba]
+  brid 8
+
+# braid 8 — absolute + delay, no link; rD=0b11000=24
+# Word: 0xBB000008  LE: 08 00 00 BB
+# CHECK: braid 8                      # encoding: [0x08,0x00,0x00,0xbb]
+  braid 8
+
+# bralid r15, 8 — absolute + link + delay; rD=r15=15, rA=0b11100=28
+# Word: 0xB9FC0008  LE: 08 00 FC B9
+# CHECK: bralid r15, 8               # encoding: [0x08,0x00,0xfc,0xb9]
+  bralid r15, 8
+
+#------------------------------------------------------------------------------
+# Opcode 0x27 — remaining conditional delay-slot forms (bltd/bled/bgtd/bged)
+#------------------------------------------------------------------------------
+
+# bltd r4, r5 — LT + delay; rD=0b10010=18
+# byte3: 0x9E; byte2: rD[2:0]=010, rA=00100 → 0x44
+# LE: 00 28 44 9E
+# CHECK: bltd r4, r5                  # encoding: [0x00,0x28,0x44,0x9e]
+  bltd r4, r5
+
+# bled r4, r5 — LE + delay; rD=0b10011=19
+# byte3: 0x9E; byte2: 0x64
+# LE: 00 28 64 9E
+# CHECK: bled r4, r5                  # encoding: [0x00,0x28,0x64,0x9e]
+  bled r4, r5
+
+# bgtd r4, r5 — GT + delay; rD=0b10100=20
+# byte3: 0x9E; byte2: 0x84
+# LE: 00 28 84 9E
+# CHECK: bgtd r4, r5                  # encoding: [0x00,0x28,0x84,0x9e]
+  bgtd r4, r5
+
+# bged r4, r5 — GE + delay; rD=0b10101=21
+# byte3: 0x9E; byte2: 0xA4
+# LE: 00 28 A4 9E
+# CHECK: bged r4, r5                  # encoding: [0x00,0x28,0xa4,0x9e]
+  bged r4, r5

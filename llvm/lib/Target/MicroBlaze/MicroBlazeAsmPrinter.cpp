@@ -8,6 +8,7 @@
 
 #include "MicroBlazeMCInstLower.h"
 #include "MicroBlazeSubtarget.h"
+#include "MCTargetDesc/MicroBlazeInstPrinter.h"
 #include "MCTargetDesc/MicroBlazeMCTargetDesc.h"
 #include "TargetInfo/MicroBlazeTargetInfo.h"
 #include "llvm/CodeGen/AsmPrinter.h"
@@ -40,6 +41,8 @@ public:
   StringRef getPassName() const override { return "MicroBlaze Assembly Printer"; }
 
   void emitInstruction(const MachineInstr *MI) override;
+  bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
+                       const char *ExtraCode, raw_ostream &O) override;
 };
 
 } // namespace
@@ -57,6 +60,25 @@ void MicroBlazeAsmPrinter::emitInstruction(const MachineInstr *MI) {
     MCInstLowering.Lower(&*I, TmpInst);
     EmitToStreamer(*OutStreamer, TmpInst);
   } while ((++I != E) && I->isInsideBundle());
+}
+
+bool MicroBlazeAsmPrinter::PrintAsmOperand(const MachineInstr *MI,
+                                            unsigned OpNo,
+                                            const char *ExtraCode,
+                                            raw_ostream &O) {
+  if (ExtraCode && ExtraCode[0])
+    return AsmPrinter::PrintAsmOperand(MI, OpNo, ExtraCode, O);
+  const MachineOperand &MO = MI->getOperand(OpNo);
+  switch (MO.getType()) {
+  case MachineOperand::MO_Register:
+    O << MicroBlazeInstPrinter::getRegisterName(MO.getReg());
+    return false;
+  case MachineOperand::MO_Immediate:
+    O << MO.getImm();
+    return false;
+  default:
+    return AsmPrinter::PrintAsmOperand(MI, OpNo, ExtraCode, O);
+  }
 }
 
 // Force static initialisation.

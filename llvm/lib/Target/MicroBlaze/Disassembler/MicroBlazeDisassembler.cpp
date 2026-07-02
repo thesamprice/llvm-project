@@ -65,6 +65,24 @@ static DecodeStatus DecodeFPRRegisterClass(MCInst &Inst, unsigned RegNo,
   return MCDisassembler::Success;
 }
 
+// RFSL port registers rfsl0-rfsl15. Hardware encoding is the 4-bit port index
+// placed in instruction bits[7:4] for static FSL get/put (opcode 0x1B).
+static const unsigned RFSLDecoderTable[] = {
+  MicroBlaze::rfsl0,  MicroBlaze::rfsl1,  MicroBlaze::rfsl2,  MicroBlaze::rfsl3,
+  MicroBlaze::rfsl4,  MicroBlaze::rfsl5,  MicroBlaze::rfsl6,  MicroBlaze::rfsl7,
+  MicroBlaze::rfsl8,  MicroBlaze::rfsl9,  MicroBlaze::rfsl10, MicroBlaze::rfsl11,
+  MicroBlaze::rfsl12, MicroBlaze::rfsl13, MicroBlaze::rfsl14, MicroBlaze::rfsl15
+};
+
+static DecodeStatus DecodeRFSLRegisterClass(MCInst &Inst, unsigned RegNo,
+                                            uint64_t /*Address*/,
+                                            const MCDisassembler * /*Decoder*/) {
+  if (RegNo > 15)
+    return MCDisassembler::Fail;
+  Inst.addOperand(MCOperand::createReg(RFSLDecoderTable[RegNo]));
+  return MCDisassembler::Success;
+}
+
 // Decode a memri complex operand: {base[20:16], offset[15:0]} from Type B.
 // Adds base register then signed 16-bit offset.
 static DecodeStatus decodeMemRIOperand(MCInst &Inst, unsigned Val,
@@ -90,24 +108,6 @@ static DecodeStatus decodeMemRROperand(MCInst &Inst, unsigned Val,
     return MCDisassembler::Fail;
   Inst.addOperand(MCOperand::createReg(GPRDecoderTable[Base]));
   Inst.addOperand(MCOperand::createReg(GPRDecoderTable[Idx]));
-  return MCDisassembler::Success;
-}
-
-// RFSL port registers rfsl0-rfsl15. Hardware encoding is the 4-bit port index
-// placed in instruction bits[7:4] for static FSL get/put (opcode 0x1B).
-static const unsigned RFSLDecoderTable[] = {
-  MicroBlaze::rfsl0,  MicroBlaze::rfsl1,  MicroBlaze::rfsl2,  MicroBlaze::rfsl3,
-  MicroBlaze::rfsl4,  MicroBlaze::rfsl5,  MicroBlaze::rfsl6,  MicroBlaze::rfsl7,
-  MicroBlaze::rfsl8,  MicroBlaze::rfsl9,  MicroBlaze::rfsl10, MicroBlaze::rfsl11,
-  MicroBlaze::rfsl12, MicroBlaze::rfsl13, MicroBlaze::rfsl14, MicroBlaze::rfsl15
-};
-
-static DecodeStatus DecodeRFSLRegisterClass(MCInst &Inst, unsigned RegNo,
-                                            uint64_t /*Address*/,
-                                            const MCDisassembler * /*Decoder*/) {
-  if (RegNo > 15)
-    return MCDisassembler::Fail;
-  Inst.addOperand(MCOperand::createReg(RFSLDecoderTable[RegNo]));
   return MCDisassembler::Success;
 }
 
