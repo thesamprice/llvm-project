@@ -15,6 +15,7 @@ tablegen(LLVM MicroBlazeGenDisassemblerTables.inc -gen-disassembler)
 add_public_tablegen_target(MicroBlazeCommonTableGen)
 
 add_llvm_target(MicroBlazeCodeGen
+  DelaySlotFillerBase.cpp
   MicroBlazeAsmPrinter.cpp
   MicroBlazeDelaySlotFiller.cpp
   MicroBlazeFrameLowering.cpp
