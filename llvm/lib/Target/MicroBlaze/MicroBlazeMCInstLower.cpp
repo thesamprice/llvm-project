@@ -64,6 +64,15 @@ MicroBlazeMCInstLower::LowerOperand(const MachineOperand &MO,
   case MachineOperand::MO_ExternalSymbol:
     return LowerSymbolOperand(MO);
 
+  case MachineOperand::MO_ConstantPoolIndex: {
+    const MCSymbol *CPSym = Printer.GetCPISymbol(MO.getIndex());
+    const MCExpr *Expr = MCSymbolRefExpr::create(CPSym, Ctx);
+    if (MO.getOffset())
+      Expr = MCBinaryExpr::createAdd(
+          Expr, MCConstantExpr::create(MO.getOffset(), Ctx), Ctx);
+    return MCOperand::createExpr(Expr);
+  }
+
   case MachineOperand::MO_MachineBasicBlock:
     return MCOperand::createExpr(
         MCSymbolRefExpr::create(MO.getMBB()->getSymbol(), Ctx));

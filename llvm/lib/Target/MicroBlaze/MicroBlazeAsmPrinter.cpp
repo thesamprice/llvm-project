@@ -46,9 +46,17 @@ public:
 
 void MicroBlazeAsmPrinter::emitInstruction(const MachineInstr *MI) {
   MicroBlazeMCInstLower MCInstLowering(OutContext, *this);
-  MCInst TmpInst;
-  MCInstLowering.Lower(MI, TmpInst);
-  EmitToStreamer(*OutStreamer, TmpInst);
+
+  // Emit the instruction and any bundle body instructions (delay slot fillers).
+  // The base AsmPrinter loop uses bundle_iterator, which visits only bundle
+  // heads; we must emit bundle body instructions inline here.
+  MachineBasicBlock::const_instr_iterator I = MI->getIterator();
+  MachineBasicBlock::const_instr_iterator E = MI->getParent()->instr_end();
+  do {
+    MCInst TmpInst;
+    MCInstLowering.Lower(&*I, TmpInst);
+    EmitToStreamer(*OutStreamer, TmpInst);
+  } while ((++I != E) && I->isInsideBundle());
 }
 
 // Force static initialisation.
