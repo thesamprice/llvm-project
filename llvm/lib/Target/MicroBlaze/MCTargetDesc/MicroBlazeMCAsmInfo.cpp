@@ -28,8 +28,8 @@ MicroBlazeMCAsmInfo::MicroBlazeMCAsmInfo(const Triple & /*TheTriple*/,
   MinInstAlignment = 4;
 }
 
-void MicroBlazeMCAsmInfo::printSpecifierExpr(raw_ostream &OS,
-                                              const MCSpecifierExpr &Expr) const {
+void MicroBlazeMCAsmInfo::printSpecifierExpr(
+    raw_ostream &OS, const MCSpecifierExpr &Expr) const {
   printExpr(OS, *Expr.getSubExpr());
   switch (Expr.getSpecifier()) {
   case ELF::R_MICROBLAZE_GOT_64:

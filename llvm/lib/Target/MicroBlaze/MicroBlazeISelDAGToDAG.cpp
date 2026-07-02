@@ -50,12 +50,12 @@ FunctionPass *llvm::createMicroBlazeISelDag(MicroBlazeTargetMachine &TM,
 
 // SelectADDRri — match base + signed-16-bit-offset address forms.
 bool MicroBlazeDAGToDAGISel::SelectADDRri(SDValue Addr, SDValue &Base,
-                                           SDValue &Offset) {
+                                          SDValue &Offset) {
   SDLoc DL(Addr);
   MVT PtrVT = MVT::i32;
 
   if (auto *FIN = dyn_cast<FrameIndexSDNode>(Addr)) {
-    Base   = CurDAG->getTargetFrameIndex(FIN->getIndex(), PtrVT);
+    Base = CurDAG->getTargetFrameIndex(FIN->getIndex(), PtrVT);
     Offset = CurDAG->getTargetConstant(0, DL, PtrVT);
     return true;
   }
@@ -66,7 +66,7 @@ bool MicroBlazeDAGToDAGISel::SelectADDRri(SDValue Addr, SDValue &Base,
     if (auto *CN = dyn_cast<ConstantSDNode>(Op1)) {
       int64_t Imm = CN->getSExtValue();
       if (isInt<16>(Imm)) {
-        Base   = Op0;
+        Base = Op0;
         if (auto *FIN = dyn_cast<FrameIndexSDNode>(Base))
           Base = CurDAG->getTargetFrameIndex(FIN->getIndex(), PtrVT);
         Offset = CurDAG->getTargetConstant(Imm, DL, PtrVT);
@@ -78,16 +78,16 @@ bool MicroBlazeDAGToDAGISel::SelectADDRri(SDValue Addr, SDValue &Base,
       return false;
   }
 
-  Base   = Addr;
+  Base = Addr;
   Offset = CurDAG->getTargetConstant(0, DL, PtrVT);
   return true;
 }
 
 // SelectADDRrr — match base + register-index address forms.
 bool MicroBlazeDAGToDAGISel::SelectADDRrr(SDValue Addr, SDValue &Base,
-                                           SDValue &Index) {
+                                          SDValue &Index) {
   if (Addr.getOpcode() == ISD::ADD) {
-    Base  = Addr.getOperand(0);
+    Base = Addr.getOperand(0);
     Index = Addr.getOperand(1);
     return true;
   }
@@ -106,10 +106,12 @@ bool MicroBlazeDAGToDAGISel::SelectFSLImm(SDValue N, SDValue &Port) {
   // rfslN enum values are not guaranteed contiguous (cf. the disassembler's
   // RFSLDecoderTable), so map through an explicit table.
   static const MCPhysReg RFSLRegs[16] = {
-      MicroBlaze::rfsl0,  MicroBlaze::rfsl1,  MicroBlaze::rfsl2,  MicroBlaze::rfsl3,
-      MicroBlaze::rfsl4,  MicroBlaze::rfsl5,  MicroBlaze::rfsl6,  MicroBlaze::rfsl7,
-      MicroBlaze::rfsl8,  MicroBlaze::rfsl9,  MicroBlaze::rfsl10, MicroBlaze::rfsl11,
-      MicroBlaze::rfsl12, MicroBlaze::rfsl13, MicroBlaze::rfsl14, MicroBlaze::rfsl15};
+      MicroBlaze::rfsl0,  MicroBlaze::rfsl1,  MicroBlaze::rfsl2,
+      MicroBlaze::rfsl3,  MicroBlaze::rfsl4,  MicroBlaze::rfsl5,
+      MicroBlaze::rfsl6,  MicroBlaze::rfsl7,  MicroBlaze::rfsl8,
+      MicroBlaze::rfsl9,  MicroBlaze::rfsl10, MicroBlaze::rfsl11,
+      MicroBlaze::rfsl12, MicroBlaze::rfsl13, MicroBlaze::rfsl14,
+      MicroBlaze::rfsl15};
   Port = CurDAG->getRegister(RFSLRegs[V], MVT::i32);
   return true;
 }
@@ -158,9 +160,10 @@ bool MicroBlazeDAGToDAGISel::tryBSEFI(SDNode *N) {
   return true;
 }
 
-// Match (or (and base, inv_placed_mask) (shl src shift)) → BSIFI rD, rA, width, shift
-// BSIFI inserts rA[width-1:0] into rD[shift+width-1:shift], preserving other bits.
-// inv_placed_mask must be the bitwise inversion of a contiguous shifted field.
+// Match (or (and base, inv_placed_mask) (shl src shift)) → BSIFI rD, rA, width,
+// shift BSIFI inserts rA[width-1:0] into rD[shift+width-1:shift], preserving
+// other bits. inv_placed_mask must be the bitwise inversion of a contiguous
+// shifted field.
 bool MicroBlazeDAGToDAGISel::tryBSIFI(SDNode *N) {
   if (!Subtarget->hasBarrelShift())
     return false;
@@ -221,16 +224,26 @@ bool MicroBlazeDAGToDAGISel::tryBSIFI(SDNode *N) {
 // BLTID fires when reg < 0, BGTID when reg > 0, etc.
 static unsigned getBranchOpcodeForCC(ISD::CondCode CC) {
   switch (CC) {
-  case ISD::SETEQ:  return MicroBlaze::BEQID;
-  case ISD::SETNE:  return MicroBlaze::BNEID;
-  case ISD::SETLT:  return MicroBlaze::BLTID;
-  case ISD::SETLE:  return MicroBlaze::BLEID;
-  case ISD::SETGT:  return MicroBlaze::BGTID;
-  case ISD::SETGE:  return MicroBlaze::BGEID;
-  case ISD::SETULT: return MicroBlaze::BLTID;
-  case ISD::SETULE: return MicroBlaze::BLEID;
-  case ISD::SETUGT: return MicroBlaze::BGTID;
-  case ISD::SETUGE: return MicroBlaze::BGEID;
+  case ISD::SETEQ:
+    return MicroBlaze::BEQID;
+  case ISD::SETNE:
+    return MicroBlaze::BNEID;
+  case ISD::SETLT:
+    return MicroBlaze::BLTID;
+  case ISD::SETLE:
+    return MicroBlaze::BLEID;
+  case ISD::SETGT:
+    return MicroBlaze::BGTID;
+  case ISD::SETGE:
+    return MicroBlaze::BGEID;
+  case ISD::SETULT:
+    return MicroBlaze::BLTID;
+  case ISD::SETULE:
+    return MicroBlaze::BLEID;
+  case ISD::SETUGT:
+    return MicroBlaze::BGTID;
+  case ISD::SETUGE:
+    return MicroBlaze::BGEID;
   default:
     llvm_unreachable("Unsupported condition code for MicroBlaze branch");
   }
@@ -241,12 +254,18 @@ static unsigned getBranchOpcodeForCC(ISD::CondCode CC) {
 // So rD > 0 when rA < rB, rD < 0 when rA > rB, rD == 0 when rA == rB.
 static unsigned getCmpBranchOpcodeForCC(ISD::CondCode CC) {
   switch (CC) {
-  case ISD::SETEQ:  return MicroBlaze::BEQID;
-  case ISD::SETNE:  return MicroBlaze::BNEID;
-  case ISD::SETLT:  return MicroBlaze::BGTID;
-  case ISD::SETLE:  return MicroBlaze::BGEID;
-  case ISD::SETGT:  return MicroBlaze::BLTID;
-  case ISD::SETGE:  return MicroBlaze::BLEID;
+  case ISD::SETEQ:
+    return MicroBlaze::BEQID;
+  case ISD::SETNE:
+    return MicroBlaze::BNEID;
+  case ISD::SETLT:
+    return MicroBlaze::BGTID;
+  case ISD::SETLE:
+    return MicroBlaze::BGEID;
+  case ISD::SETGT:
+    return MicroBlaze::BLTID;
+  case ISD::SETGE:
+    return MicroBlaze::BLEID;
   default:
     llvm_unreachable("Expected signed CC for CMP branch");
   }
@@ -266,8 +285,8 @@ void MicroBlazeDAGToDAGISel::Select(SDNode *Node) {
     int FI = cast<FrameIndexSDNode>(Node)->getIndex();
     SDValue TFI = CurDAG->getTargetFrameIndex(FI, MVT::i32);
     SDValue Zero = CurDAG->getTargetConstant(0, DL, MVT::i32);
-    SDNode *N = CurDAG->getMachineNode(MicroBlaze::ADDIK, DL, MVT::i32,
-                                        TFI, Zero);
+    SDNode *N =
+        CurDAG->getMachineNode(MicroBlaze::ADDIK, DL, MVT::i32, TFI, Zero);
     ReplaceNode(Node, N);
     return;
   }
@@ -279,12 +298,12 @@ void MicroBlazeDAGToDAGISel::Select(SDNode *Node) {
     ISD::CondCode CC = static_cast<ISD::CondCode>(
         cast<ConstantSDNode>(Node->getOperand(1))->getZExtValue());
     SDValue DiffVal = Node->getOperand(2);
-    SDValue Dest    = Node->getOperand(3);
-    SDValue Chain   = Node->getOperand(0);
+    SDValue Dest = Node->getOperand(3);
+    SDValue Chain = Node->getOperand(0);
 
     unsigned BrOp = getBranchOpcodeForCC(CC);
-    SDNode *Selected = CurDAG->getMachineNode(BrOp, DL, MVT::Other,
-                                              {DiffVal, Dest, Chain});
+    SDNode *Selected =
+        CurDAG->getMachineNode(BrOp, DL, MVT::Other, {DiffVal, Dest, Chain});
     ReplaceNode(Node, Selected);
     return;
   }
@@ -296,16 +315,16 @@ void MicroBlazeDAGToDAGISel::Select(SDNode *Node) {
     SDLoc DL(Node);
     ISD::CondCode CC = static_cast<ISD::CondCode>(
         cast<ConstantSDNode>(Node->getOperand(1))->getZExtValue());
-    SDValue LHS   = Node->getOperand(2);
-    SDValue RHS   = Node->getOperand(3);
-    SDValue Dest  = Node->getOperand(4);
+    SDValue LHS = Node->getOperand(2);
+    SDValue RHS = Node->getOperand(3);
+    SDValue Dest = Node->getOperand(4);
     SDValue Chain = Node->getOperand(0);
-    SDNode *CmpNode = CurDAG->getMachineNode(MicroBlaze::CMP, DL, MVT::i32,
-                                             {LHS, RHS});
+    SDNode *CmpNode =
+        CurDAG->getMachineNode(MicroBlaze::CMP, DL, MVT::i32, {LHS, RHS});
     SDValue CmpResult(CmpNode, 0);
     unsigned BrOp = getCmpBranchOpcodeForCC(CC);
-    SDNode *Selected = CurDAG->getMachineNode(BrOp, DL, MVT::Other,
-                                             {CmpResult, Dest, Chain});
+    SDNode *Selected =
+        CurDAG->getMachineNode(BrOp, DL, MVT::Other, {CmpResult, Dest, Chain});
     ReplaceNode(Node, Selected);
     return;
   }
@@ -317,40 +336,50 @@ void MicroBlazeDAGToDAGISel::Select(SDNode *Node) {
     SDLoc DL(Node);
     ISD::CondCode CC = static_cast<ISD::CondCode>(
         cast<ConstantSDNode>(Node->getOperand(1))->getZExtValue());
-    SDValue LHS   = Node->getOperand(2);
-    SDValue RHS   = Node->getOperand(3);
-    SDValue Dest  = Node->getOperand(4);
+    SDValue LHS = Node->getOperand(2);
+    SDValue RHS = Node->getOperand(3);
+    SDValue Dest = Node->getOperand(4);
     SDValue Chain = Node->getOperand(0);
 
-    SDNode *CmpuNode = CurDAG->getMachineNode(MicroBlaze::CMPU, DL, MVT::i32,
-                                              {LHS, RHS});
+    SDNode *CmpuNode =
+        CurDAG->getMachineNode(MicroBlaze::CMPU, DL, MVT::i32, {LHS, RHS});
     SDValue CmpuResult(CmpuNode, 0);
     unsigned BrOp;
     switch (CC) {
-    case ISD::SETUGT: BrOp = MicroBlaze::BLTID; break;
-    case ISD::SETULT: BrOp = MicroBlaze::BGTID; break;
-    case ISD::SETUGE: BrOp = MicroBlaze::BLEID; break;
-    case ISD::SETULE: BrOp = MicroBlaze::BGEID; break;
-    default: llvm_unreachable("Expected unsigned inequality CC in BR_CC_CMPU");
+    case ISD::SETUGT:
+      BrOp = MicroBlaze::BLTID;
+      break;
+    case ISD::SETULT:
+      BrOp = MicroBlaze::BGTID;
+      break;
+    case ISD::SETUGE:
+      BrOp = MicroBlaze::BLEID;
+      break;
+    case ISD::SETULE:
+      BrOp = MicroBlaze::BGEID;
+      break;
+    default:
+      llvm_unreachable("Expected unsigned inequality CC in BR_CC_CMPU");
     }
-    SDNode *Selected = CurDAG->getMachineNode(BrOp, DL, MVT::Other,
-                                              {CmpuResult, Dest, Chain});
+    SDNode *Selected =
+        CurDAG->getMachineNode(BrOp, DL, MVT::Other, {CmpuResult, Dest, Chain});
     ReplaceNode(Node, Selected);
     return;
   }
 
-  // Handle MicroBlazeISD::BR_CC_FP: (chain, cc_const, LHS_f32, RHS_f32, dest_bb)
-  // FCMP writes 0x3F800000 (1.0) if condition holds, else 0x00000000 (0.0).
-  // Treating that value as an integer: 0x3F800000 != 0, so BNEID fires on true.
-  // BEQID fires on false — used for the SETO (ordered) condition (inverted).
-  // For unordered conditions we OR two FCMP results before branching (UG984 §5).
+  // Handle MicroBlazeISD::BR_CC_FP: (chain, cc_const, LHS_f32, RHS_f32,
+  // dest_bb) FCMP writes 0x3F800000 (1.0) if condition holds, else 0x00000000
+  // (0.0). Treating that value as an integer: 0x3F800000 != 0, so BNEID fires
+  // on true. BEQID fires on false — used for the SETO (ordered) condition
+  // (inverted). For unordered conditions we OR two FCMP results before
+  // branching (UG984 §5).
   if (Node->getOpcode() == MicroBlazeISD::BR_CC_FP) {
     SDLoc DL(Node);
     ISD::CondCode CC = static_cast<ISD::CondCode>(
         cast<ConstantSDNode>(Node->getOperand(1))->getZExtValue());
-    SDValue LHS   = Node->getOperand(2);
-    SDValue RHS   = Node->getOperand(3);
-    SDValue Dest  = Node->getOperand(4);
+    SDValue LHS = Node->getOperand(2);
+    SDValue RHS = Node->getOperand(3);
+    SDValue Dest = Node->getOperand(4);
     SDValue Chain = Node->getOperand(0);
 
     unsigned Opc1, Opc2;
@@ -371,31 +400,33 @@ void MicroBlazeDAGToDAGISel::Select(SDNode *Node) {
     }
 
     unsigned BrOpc = Invert ? MicroBlaze::BEQID : MicroBlaze::BNEID;
-    SDNode *Selected = CurDAG->getMachineNode(BrOpc, DL, MVT::Other,
-                                              {FlagVal, Dest, Chain});
+    SDNode *Selected =
+        CurDAG->getMachineNode(BrOpc, DL, MVT::Other, {FlagVal, Dest, Chain});
     ReplaceNode(Node, Selected);
     return;
   }
 
-  // Handle MicroBlazeISD::SELECT_CC_FP: (TrueV, FalseV, CC_const, LHS_f32, RHS_f32)
-  // Choose the pseudo based on the result type: i32→SELECT_CC_FP_PSEUDO,
-  // f32→SELECT_CC_FP_F32_PSEUDO.  EmitInstrWithCustomInserter expands both
-  // to an FCMP (plus optional OR for unordered conditions) + diamond CFG.
+  // Handle MicroBlazeISD::SELECT_CC_FP: (TrueV, FalseV, CC_const, LHS_f32,
+  // RHS_f32) Choose the pseudo based on the result type:
+  // i32→SELECT_CC_FP_PSEUDO, f32→SELECT_CC_FP_F32_PSEUDO.
+  // EmitInstrWithCustomInserter expands both to an FCMP (plus optional OR for
+  // unordered conditions) + diamond CFG.
   if (Node->getOpcode() == MicroBlazeISD::SELECT_CC_FP) {
     SDLoc DL(Node);
-    SDValue TrueV  = Node->getOperand(0);
+    SDValue TrueV = Node->getOperand(0);
     SDValue FalseV = Node->getOperand(1);
     SDValue CCConst = Node->getOperand(2);
-    SDValue LHS    = Node->getOperand(3);
-    SDValue RHS    = Node->getOperand(4);
-    MVT ResultVT   = Node->getSimpleValueType(0);
+    SDValue LHS = Node->getOperand(3);
+    SDValue RHS = Node->getOperand(4);
+    MVT ResultVT = Node->getSimpleValueType(0);
 
     SDValue TargetCC = CurDAG->getTargetConstant(
         cast<ConstantSDNode>(CCConst)->getZExtValue(), DL, MVT::i32);
-    unsigned PseudoOpc = (ResultVT == MVT::f32) ? MicroBlaze::SELECT_CC_FP_F32_PSEUDO
-                                                 : MicroBlaze::SELECT_CC_FP_PSEUDO;
-    SDNode *Selected = CurDAG->getMachineNode(PseudoOpc, DL, ResultVT,
-                                              {TrueV, FalseV, TargetCC, LHS, RHS});
+    unsigned PseudoOpc = (ResultVT == MVT::f32)
+                             ? MicroBlaze::SELECT_CC_FP_F32_PSEUDO
+                             : MicroBlaze::SELECT_CC_FP_PSEUDO;
+    SDNode *Selected = CurDAG->getMachineNode(
+        PseudoOpc, DL, ResultVT, {TrueV, FalseV, TargetCC, LHS, RHS});
     ReplaceNode(Node, Selected);
     return;
   }

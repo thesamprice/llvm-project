@@ -23,14 +23,12 @@ class MicroBlazeFrameLowering : public TargetFrameLowering {
 public:
   explicit MicroBlazeFrameLowering(const MicroBlazeSubtarget &STI);
 
-  void emitPrologue(MachineFunction &MF,
-                    MachineBasicBlock &MBB) const override;
-  void emitEpilogue(MachineFunction &MF,
-                    MachineBasicBlock &MBB) const override;
+  void emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
+  void emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
   bool hasFPImpl(const MachineFunction &MF) const override;
-  MachineBasicBlock::iterator eliminateCallFramePseudoInstr(
-      MachineFunction &MF, MachineBasicBlock &MBB,
-      MachineBasicBlock::iterator I) const override;
+  MachineBasicBlock::iterator
+  eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
+                                MachineBasicBlock::iterator I) const override;
 
   void determineCalleeSaves(MachineFunction &MF, BitVector &SavedRegs,
                             RegScavenger *RS = nullptr) const override;
@@ -40,10 +38,11 @@ public:
                                  ArrayRef<CalleeSavedInfo> CSI,
                                  const TargetRegisterInfo *TRI) const override;
 
-  bool restoreCalleeSavedRegisters(
-      MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
-      MutableArrayRef<CalleeSavedInfo> CSI,
-      const TargetRegisterInfo *TRI) const override;
+  bool
+  restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
+                              MachineBasicBlock::iterator MI,
+                              MutableArrayRef<CalleeSavedInfo> CSI,
+                              const TargetRegisterInfo *TRI) const override;
 };
 
 } // namespace llvm

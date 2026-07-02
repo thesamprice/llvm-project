@@ -27,8 +27,7 @@ MicroBlazeMCInstLower::MicroBlazeMCInstLower(MCContext &Ctx,
                                              AsmPrinter &Printer)
     : Ctx(Ctx), Printer(Printer) {}
 
-void MicroBlazeMCInstLower::Lower(const MachineInstr *MI,
-                                   MCInst &OutMI) const {
+void MicroBlazeMCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
   // LI32: 32-bit constant materialisation pseudo.
   // Expand to ADDIK rD, R0, imm32 — the MCCodeEmitter prepends an IMM
   // prefix automatically when the value does not fit in simm16 (UG984 §5.2).
@@ -48,9 +47,8 @@ void MicroBlazeMCInstLower::Lower(const MachineInstr *MI,
   }
 }
 
-MCOperand
-MicroBlazeMCInstLower::LowerOperand(const MachineOperand &MO,
-                                     int64_t Offset) const {
+MCOperand MicroBlazeMCInstLower::LowerOperand(const MachineOperand &MO,
+                                              int64_t Offset) const {
   switch (MO.getType()) {
   case MachineOperand::MO_Register:
     if (MO.isImplicit())

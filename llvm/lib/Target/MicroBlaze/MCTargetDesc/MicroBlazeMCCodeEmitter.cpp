@@ -18,8 +18,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MicroBlazeFixupKinds.h"
 #include "MCTargetDesc/MicroBlazeMCTargetDesc.h"
+#include "MicroBlazeFixupKinds.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCContext.h"
@@ -105,17 +105,18 @@ unsigned MicroBlazeMCCodeEmitter::getMachineOpValue(
   assert(MO.isExpr() && "Expected register, immediate, or expression");
   // The fixup type and offset are refined in encodeInstruction; here we
   // conservatively use FIXUP_MICROBLAZE_32 as a placeholder.
-  Fixups.push_back(MCFixup::create(0, MO.getExpr(),
-                                   MCFixupKind(MicroBlaze::FIXUP_MICROBLAZE_32)));
+  Fixups.push_back(MCFixup::create(
+      0, MO.getExpr(), MCFixupKind(MicroBlaze::FIXUP_MICROBLAZE_32)));
   return 0;
 }
 
 // Encode a memri/memrr complex operand.
 // memri: [20:16]=base, [15:0]=imm16.
 // memrr: [20:16]=base, [15:11]=index.
-unsigned MicroBlazeMCCodeEmitter::getMemOpValue(
-    const MCInst &MI, unsigned OpNo, SmallVectorImpl<MCFixup> &Fixups,
-    const MCSubtargetInfo &STI) const {
+unsigned
+MicroBlazeMCCodeEmitter::getMemOpValue(const MCInst &MI, unsigned OpNo,
+                                       SmallVectorImpl<MCFixup> &Fixups,
+                                       const MCSubtargetInfo &STI) const {
   const MCOperand &Base = MI.getOperand(OpNo);
   const MCOperand &Off = MI.getOperand(OpNo + 1);
   unsigned BaseReg = MRI.getEncodingValue(Base.getReg());
@@ -127,14 +128,15 @@ unsigned MicroBlazeMCCodeEmitter::getMemOpValue(
   // memri: pack base + signed 16-bit offset.
   unsigned Offset = Off.isImm() ? (unsigned)Off.getImm() & 0xFFFF : 0;
   if (Off.isExpr())
-    Fixups.push_back(MCFixup::create(0, Off.getExpr(),
-                                     MCFixupKind(MicroBlaze::FIXUP_MICROBLAZE_32)));
+    Fixups.push_back(MCFixup::create(
+        0, Off.getExpr(), MCFixupKind(MicroBlaze::FIXUP_MICROBLAZE_32)));
   return (BaseReg << 16) | Offset;
 }
 
-unsigned MicroBlazeMCCodeEmitter::getBSIFIImmWValue(
-    const MCInst &MI, unsigned OpNo, SmallVectorImpl<MCFixup> &Fixups,
-    const MCSubtargetInfo &STI) const {
+unsigned
+MicroBlazeMCCodeEmitter::getBSIFIImmWValue(const MCInst &MI, unsigned OpNo,
+                                           SmallVectorImpl<MCFixup> &Fixups,
+                                           const MCSubtargetInfo &STI) const {
   unsigned Width = MI.getOperand(OpNo).getImm();
   unsigned Shift = MI.getOperand(OpNo + 1).getImm();
   return (Shift + Width - 1) & 0x1F;
@@ -143,14 +145,14 @@ unsigned MicroBlazeMCCodeEmitter::getBSIFIImmWValue(
 // Determine if MI is a Type B instruction with an operand requiring an IMM
 // prefix.  Sets IsPCRel to true for branch/call instructions.
 bool MicroBlazeMCCodeEmitter::needsIMMPrefix(const MCInst &MI,
-                                              SmallVectorImpl<MCFixup> &Fixups,
-                                              bool &IsPCRel) const {
+                                             SmallVectorImpl<MCFixup> &Fixups,
+                                             bool &IsPCRel) const {
   const MCInstrDesc &Desc = MCII.get(MI.getOpcode());
   IsPCRel = false;
 
-  // Only Type B instructions (those with an imm16 field) can have an IMM prefix.
-  // We identify them by the presence of an OPERAND_IMMEDIATE or OPERAND_PCREL
-  // operand in the instruction definition.
+  // Only Type B instructions (those with an imm16 field) can have an IMM
+  // prefix. We identify them by the presence of an OPERAND_IMMEDIATE or
+  // OPERAND_PCREL operand in the instruction definition.
   for (unsigned i = 0, e = MI.getNumOperands(); i < e; ++i) {
     const MCOperandInfo &OpInfo = Desc.operands()[i];
     if (OpInfo.OperandType == MCOI::OPERAND_PCREL)
@@ -210,8 +212,7 @@ void MicroBlazeMCCodeEmitter::emitIMMPrefix(
 
 void MicroBlazeMCCodeEmitter::encodeInstruction(
     const MCInst &MI, SmallVectorImpl<char> &CB,
-    SmallVectorImpl<MCFixup> &Fixups,
-    const MCSubtargetInfo &STI) const {
+    SmallVectorImpl<MCFixup> &Fixups, const MCSubtargetInfo &STI) const {
 
   // Gather fixups from sub-operand encoding.
   SmallVector<MCFixup, 4> InstrFixups;
@@ -261,14 +262,15 @@ void MicroBlazeMCCodeEmitter::encodeInstruction(
     InstrFixups.clear();
   } else if (IsPCRel && SymExpr) {
     // Short PC-relative branch: no IMM prefix needed.
-    // Drop the placeholder fixup from getMachineOpValue and record the real one.
-    // FIXUP_MICROBLAZE_32_PCREL patches bits[15:0] of the branch instruction
-    // (LE bytes 0-1) with the signed 16-bit offset (target - branch_PC).
-    // Branch range is ±32 KB; the assembler errors if the symbol is out of range.
+    // Drop the placeholder fixup from getMachineOpValue and record the real
+    // one. FIXUP_MICROBLAZE_32_PCREL patches bits[15:0] of the branch
+    // instruction (LE bytes 0-1) with the signed 16-bit offset (target -
+    // branch_PC). Branch range is ±32 KB; the assembler errors if the symbol is
+    // out of range.
     InstrFixups.clear();
-    Fixups.push_back(MCFixup::create(CB.size(), SymExpr,
-                                     MCFixupKind(MicroBlaze::FIXUP_MICROBLAZE_32_PCREL),
-                                     /*PCRel=*/true));
+    Fixups.push_back(MCFixup::create(
+        CB.size(), SymExpr, MCFixupKind(MicroBlaze::FIXUP_MICROBLAZE_32_PCREL),
+        /*PCRel=*/true));
   }
 
   // Adjust fixup offsets to be relative to start of *this* instruction word.
@@ -284,6 +286,6 @@ void MicroBlazeMCCodeEmitter::encodeInstruction(
 #include "MicroBlazeGenMCCodeEmitter.inc"
 
 MCCodeEmitter *llvm::createMicroBlazeMCCodeEmitter(const MCInstrInfo &MCII,
-                                                    MCContext &Ctx) {
+                                                   MCContext &Ctx) {
   return new MicroBlazeMCCodeEmitter(MCII, *Ctx.getRegisterInfo(), Ctx);
 }

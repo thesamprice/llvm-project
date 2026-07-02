@@ -12,10 +12,10 @@
 #include "MicroBlazeTargetTransformInfo.h"
 #include "TargetInfo/MicroBlazeTargetInfo.h"
 #include "llvm/CodeGen/Passes.h"
+#include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Compiler.h"
-#include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/Target/TargetOptions.h"
 #include <memory>
 #include <optional>
@@ -38,12 +38,12 @@ static Reloc::Model getEffectiveRelocModel(std::optional<Reloc::Model> RM) {
 const MicroBlazeSubtarget *
 MicroBlazeTargetMachine::getSubtargetImpl(const Function &F) const {
   Attribute CPUAttr = F.getFnAttribute("target-cpu");
-  Attribute FSAttr  = F.getFnAttribute("target-features");
+  Attribute FSAttr = F.getFnAttribute("target-features");
 
-  std::string CPU = CPUAttr.isValid() ? CPUAttr.getValueAsString().str()
-                                       : TargetCPU;
-  std::string FS  = FSAttr.isValid()  ? FSAttr.getValueAsString().str()
-                                       : TargetFS;
+  std::string CPU =
+      CPUAttr.isValid() ? CPUAttr.getValueAsString().str() : TargetCPU;
+  std::string FS =
+      FSAttr.isValid() ? FSAttr.getValueAsString().str() : TargetFS;
 
   auto &I = SubtargetMap[CPU + FS];
   if (!I)
@@ -83,8 +83,8 @@ public:
   }
 
   bool addInstSelector() override {
-    addPass(createMicroBlazeISelDag(getMicroBlazeTargetMachine(),
-                                    getOptLevel()));
+    addPass(
+        createMicroBlazeISelDag(getMicroBlazeTargetMachine(), getOptLevel()));
     return false;
   }
 

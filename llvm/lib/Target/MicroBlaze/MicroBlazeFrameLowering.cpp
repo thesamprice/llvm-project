@@ -29,12 +29,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MicroBlaze.h"
 #include "MicroBlazeFrameLowering.h"
+#include "MCTargetDesc/MicroBlazeMCTargetDesc.h"
+#include "MicroBlaze.h"
 #include "MicroBlazeInstrInfo.h"
 #include "MicroBlazeMachineFunctionInfo.h"
 #include "MicroBlazeSubtarget.h"
-#include "MCTargetDesc/MicroBlazeMCTargetDesc.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -76,8 +76,7 @@ static void emitAddImmSP(MachineBasicBlock &MBB,
   }
 }
 
-MicroBlazeFrameLowering::MicroBlazeFrameLowering(
-    const MicroBlazeSubtarget &STI)
+MicroBlazeFrameLowering::MicroBlazeFrameLowering(const MicroBlazeSubtarget &STI)
     : TargetFrameLowering(TargetFrameLowering::StackGrowsDown, Align(4), 0),
       STI(STI) {}
 
@@ -148,7 +147,8 @@ bool MicroBlazeFrameLowering::spillCalleeSavedRegisters(
   // Interrupt handler (cc73): after spilling the GPRs, save MSR.  R11 has just
   // been spilled (forced into CSI) so it is free as the mfs scratch register.
   if (isMicroBlazeInterruptHandler(MF.getFunction())) {
-    int MSRSlot = MF.getInfo<MicroBlazeMachineFunctionInfo>()->getMSRSpillSlot();
+    int MSRSlot =
+        MF.getInfo<MicroBlazeMachineFunctionInfo>()->getMSRSpillSlot();
     BuildMI(MBB, MI, DL, TII.get(MicroBlaze::MFS), MicroBlaze::R11)
         .addImm(/*RMSR=*/1)
         .setMIFlag(MachineInstr::FrameSetup);
@@ -163,8 +163,7 @@ bool MicroBlazeFrameLowering::spillCalleeSavedRegisters(
 
 bool MicroBlazeFrameLowering::restoreCalleeSavedRegisters(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
-    MutableArrayRef<CalleeSavedInfo> CSI,
-    const TargetRegisterInfo *TRI) const {
+    MutableArrayRef<CalleeSavedInfo> CSI, const TargetRegisterInfo *TRI) const {
   if (CSI.empty())
     return true;
   MachineFunction &MF = *MBB.getParent();
@@ -174,7 +173,8 @@ bool MicroBlazeFrameLowering::restoreCalleeSavedRegisters(
   // Interrupt handler (cc73): restore MSR first, using R11 (restored from its
   // own slot just below) as the mts scratch register.
   if (isMicroBlazeInterruptHandler(MF.getFunction())) {
-    int MSRSlot = MF.getInfo<MicroBlazeMachineFunctionInfo>()->getMSRSpillSlot();
+    int MSRSlot =
+        MF.getInfo<MicroBlazeMachineFunctionInfo>()->getMSRSpillSlot();
     BuildMI(MBB, MI, DL, TII.get(MicroBlaze::LWI), MicroBlaze::R11)
         .addFrameIndex(MSRSlot)
         .addImm(0)
@@ -199,7 +199,7 @@ bool MicroBlazeFrameLowering::restoreCalleeSavedRegisters(
 //===----------------------------------------------------------------------===//
 
 void MicroBlazeFrameLowering::emitPrologue(MachineFunction &MF,
-                                            MachineBasicBlock &MBB) const {
+                                           MachineBasicBlock &MBB) const {
   MachineBasicBlock::iterator MBBI = MBB.begin();
   MachineFrameInfo &MFI = MF.getFrameInfo();
   auto *MBlazeI = STI.getInstrInfo();
@@ -232,7 +232,7 @@ void MicroBlazeFrameLowering::emitPrologue(MachineFunction &MF,
 //===----------------------------------------------------------------------===//
 
 void MicroBlazeFrameLowering::emitEpilogue(MachineFunction &MF,
-                                            MachineBasicBlock &MBB) const {
+                                           MachineBasicBlock &MBB) const {
   MachineBasicBlock::iterator MBBI = MBB.getLastNonDebugInstr();
   MachineFrameInfo &MFI = MF.getFrameInfo();
   auto *MBlazeI = STI.getInstrInfo();

@@ -20,7 +20,8 @@ namespace driver {
 namespace tools {
 namespace microblaze {
 
-void getMicroBlazeTargetFeatures(const Driver &D, const llvm::opt::ArgList &Args,
+void getMicroBlazeTargetFeatures(const Driver &D,
+                                 const llvm::opt::ArgList &Args,
                                  std::vector<llvm::StringRef> &Features);
 
 } // namespace microblaze

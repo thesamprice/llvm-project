@@ -32,19 +32,16 @@ public:
                    bool KillSrc, bool RenamableDst = false,
                    bool RenamableSrc = false) const override;
 
-  void storeRegToStackSlot(MachineBasicBlock &MBB,
-                           MachineBasicBlock::iterator MBBI, Register SrcReg,
-                           bool IsKill, int FrameIndex,
-                           const TargetRegisterClass *RC, Register VReg,
-                           MachineInstr::MIFlag Flags =
-                               MachineInstr::NoFlags) const override;
+  void storeRegToStackSlot(
+      MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI, Register SrcReg,
+      bool IsKill, int FrameIndex, const TargetRegisterClass *RC, Register VReg,
+      MachineInstr::MIFlag Flags = MachineInstr::NoFlags) const override;
 
-  void loadRegFromStackSlot(MachineBasicBlock &MBB,
-                            MachineBasicBlock::iterator MBBI, Register DstReg,
-                            int FrameIndex, const TargetRegisterClass *RC,
-                            Register VReg, unsigned SubReg = 0,
-                            MachineInstr::MIFlag Flags =
-                                MachineInstr::NoFlags) const override;
+  void loadRegFromStackSlot(
+      MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI, Register DstReg,
+      int FrameIndex, const TargetRegisterClass *RC, Register VReg,
+      unsigned SubReg = 0,
+      MachineInstr::MIFlag Flags = MachineInstr::NoFlags) const override;
 
   bool analyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
                      MachineBasicBlock *&FBB,
@@ -54,24 +51,23 @@ public:
   unsigned removeBranch(MachineBasicBlock &MBB,
                         int *BytesRemoved = nullptr) const override;
 
-  bool reverseBranchCondition(
-      SmallVectorImpl<MachineOperand> &Cond) const override;
+  bool
+  reverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) const override;
 
   unsigned insertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
-                        MachineBasicBlock *FBB,
-                        ArrayRef<MachineOperand> Cond,
+                        MachineBasicBlock *FBB, ArrayRef<MachineOperand> Cond,
                         const DebugLoc &DL,
                         int *BytesAdded = nullptr) const override;
 
   bool isBranchOffsetInRange(unsigned BranchOpc,
-                              int64_t BrOffset) const override;
+                             int64_t BrOffset) const override;
 
   MachineBasicBlock *getBranchDestBlock(const MachineInstr &MI) const override;
 
   void insertIndirectBranch(MachineBasicBlock &MBB, MachineBasicBlock &DestBB,
-                             MachineBasicBlock &RestoreBB, const DebugLoc &DL,
-                             int64_t BrOffset = 0,
-                             RegScavenger *RS = nullptr) const override;
+                            MachineBasicBlock &RestoreBB, const DebugLoc &DL,
+                            int64_t BrOffset = 0,
+                            RegScavenger *RS = nullptr) const override;
 
   unsigned getInstSizeInBytes(const MachineInstr &MI) const override;
 
@@ -84,7 +80,7 @@ public:
   // occupies the stage between Load and the delay slot, the result is ready
   // by the time Filler reads it — so all fillers are safe.
   bool isSafeInLoadDelaySlot(const MachineInstr &Filler,
-                              const MachineInstr &Load) const;
+                             const MachineInstr &Load) const;
 };
 
 } // namespace llvm

@@ -13,13 +13,13 @@
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
-#include "llvm/MC/MCValue.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCParser/MCParsedAsmOperand.h"
 #include "llvm/MC/MCParser/MCTargetAsmParser.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/MC/MCValue.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Compiler.h"
 
@@ -33,21 +33,33 @@ struct MicroBlazeOperand : public MCParsedAsmOperand {
 
   SMLoc StartLoc, EndLoc;
 
-  struct TokOp  { const char *Data; unsigned Length; };
-  struct RegOp  { MCRegister RegNo; };
-  struct ImmOp  { const MCExpr *Val; };
+  struct TokOp {
+    const char *Data;
+    unsigned Length;
+  };
+  struct RegOp {
+    MCRegister RegNo;
+  };
+  struct ImmOp {
+    const MCExpr *Val;
+  };
 
-  union { TokOp Tok; RegOp Reg; ImmOp Imm; };
+  union {
+    TokOp Tok;
+    RegOp Reg;
+    ImmOp Imm;
+  };
 
-  MicroBlazeOperand(KindTy K, SMLoc S, SMLoc E) : Kind(K), StartLoc(S), EndLoc(E) {}
+  MicroBlazeOperand(KindTy K, SMLoc S, SMLoc E)
+      : Kind(K), StartLoc(S), EndLoc(E) {}
 
   SMLoc getStartLoc() const override { return StartLoc; }
-  SMLoc getEndLoc()   const override { return EndLoc; }
+  SMLoc getEndLoc() const override { return EndLoc; }
 
-  bool isToken()  const override { return Kind == Token; }
-  bool isReg()    const override { return Kind == Register; }
-  bool isImm()    const override { return Kind == Immediate; }
-  bool isMem()    const override { return false; }
+  bool isToken() const override { return Kind == Token; }
+  bool isReg() const override { return Kind == Register; }
+  bool isImm() const override { return Kind == Immediate; }
+  bool isMem() const override { return false; }
 
   StringRef getToken() const {
     assert(Kind == Token);
@@ -73,27 +85,31 @@ struct MicroBlazeOperand : public MCParsedAsmOperand {
   }
 
   void print(raw_ostream &OS, const MCAsmInfo &) const override {
-    if (isToken()) OS << "Tok:" << StringRef(Tok.Data, Tok.Length);
-    else if (isReg()) OS << "Reg:" << Reg.RegNo;
-    else OS << "Imm";
+    if (isToken())
+      OS << "Tok:" << StringRef(Tok.Data, Tok.Length);
+    else if (isReg())
+      OS << "Reg:" << Reg.RegNo;
+    else
+      OS << "Imm";
   }
 
-  static std::unique_ptr<MicroBlazeOperand> createToken(StringRef Str, SMLoc S) {
+  static std::unique_ptr<MicroBlazeOperand> createToken(StringRef Str,
+                                                        SMLoc S) {
     auto Op = std::make_unique<MicroBlazeOperand>(Token, S, S);
-    Op->Tok.Data   = Str.data();
+    Op->Tok.Data = Str.data();
     Op->Tok.Length = Str.size();
     return Op;
   }
 
-  static std::unique_ptr<MicroBlazeOperand> createReg(MCRegister RegNo,
-                                                       SMLoc S, SMLoc E) {
+  static std::unique_ptr<MicroBlazeOperand> createReg(MCRegister RegNo, SMLoc S,
+                                                      SMLoc E) {
     auto Op = std::make_unique<MicroBlazeOperand>(Register, S, E);
     Op->Reg.RegNo = RegNo;
     return Op;
   }
 
   static std::unique_ptr<MicroBlazeOperand> createImm(const MCExpr *Val,
-                                                       SMLoc S, SMLoc E) {
+                                                      SMLoc S, SMLoc E) {
     auto Op = std::make_unique<MicroBlazeOperand>(Immediate, S, E);
     Op->Imm.Val = Val;
     return Op;
@@ -149,15 +165,15 @@ public:
 #include "MicroBlazeGenAsmMatcher.inc"
 
 bool MicroBlazeAsmParser::parseRegister(MCRegister &Reg, SMLoc &StartLoc,
-                                         SMLoc &EndLoc) {
+                                        SMLoc &EndLoc) {
   if (!tryParseRegister(Reg, StartLoc, EndLoc).isSuccess())
     return Error(StartLoc, "expected register");
   return false;
 }
 
 ParseStatus MicroBlazeAsmParser::tryParseRegister(MCRegister &Reg,
-                                                   SMLoc &StartLoc,
-                                                   SMLoc &EndLoc) {
+                                                  SMLoc &StartLoc,
+                                                  SMLoc &EndLoc) {
   const AsmToken &Tok = Parser.getTok();
   if (Tok.isNot(AsmToken::Identifier))
     return ParseStatus::NoMatch;
@@ -168,7 +184,7 @@ ParseStatus MicroBlazeAsmParser::tryParseRegister(MCRegister &Reg,
     return ParseStatus::NoMatch;
 
   StartLoc = Tok.getLoc();
-  EndLoc   = Tok.getEndLoc();
+  EndLoc = Tok.getEndLoc();
   Parser.Lex();
   return ParseStatus::Success;
 }
@@ -178,22 +194,22 @@ ParseStatus MicroBlazeAsmParser::tryParseRegister(MCRegister &Reg,
 // through to parseExpression as undefined symbols producing value 0.
 static int64_t matchSprName(StringRef Name) {
   return StringSwitch<int64_t>(Name)
-    .Case("rpc",    0x0000)
-    .Case("rmsr",   0x0001)
-    .Case("rear",   0x0003)
-    .Case("resr",   0x0005)
-    .Case("rfsr",   0x0007)
-    .Case("rbtr",   0x000B)
-    .Case("redr",   0x000D)
-    .Case("rslr",   0x0800)
-    .Case("rshr",   0x0802)
-    .Case("rpid",   0x1000)
-    .Case("rzpr",   0x1001)
-    .Case("rtlbx",  0x1002)
-    .Case("rtlblo", 0x1003)
-    .Case("rtlbhi", 0x1004)
-    .Case("rtlbsx", 0x1005)
-    .Default(-1);
+      .Case("rpc", 0x0000)
+      .Case("rmsr", 0x0001)
+      .Case("rear", 0x0003)
+      .Case("resr", 0x0005)
+      .Case("rfsr", 0x0007)
+      .Case("rbtr", 0x000B)
+      .Case("redr", 0x000D)
+      .Case("rslr", 0x0800)
+      .Case("rshr", 0x0802)
+      .Case("rpid", 0x1000)
+      .Case("rzpr", 0x1001)
+      .Case("rtlbx", 0x1002)
+      .Case("rtlblo", 0x1003)
+      .Case("rtlbhi", 0x1004)
+      .Case("rtlbsx", 0x1005)
+      .Default(-1);
 }
 
 bool MicroBlazeAsmParser::parseOperand(OperandVector &Operands) {
@@ -230,8 +246,8 @@ bool MicroBlazeAsmParser::parseOperand(OperandVector &Operands) {
 }
 
 bool MicroBlazeAsmParser::parseInstruction(ParseInstructionInfo &Info,
-                                            StringRef Name, SMLoc NameLoc,
-                                            OperandVector &Operands) {
+                                           StringRef Name, SMLoc NameLoc,
+                                           OperandVector &Operands) {
   Operands.push_back(MicroBlazeOperand::createToken(Name, NameLoc));
 
   if (Parser.getTok().is(AsmToken::EndOfStatement))
@@ -249,10 +265,10 @@ bool MicroBlazeAsmParser::parseInstruction(ParseInstructionInfo &Info,
 }
 
 bool MicroBlazeAsmParser::matchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
-                                                   OperandVector &Operands,
-                                                   MCStreamer &Out,
-                                                   uint64_t &ErrorInfo,
-                                                   bool MatchingInlineAsm) {
+                                                  OperandVector &Operands,
+                                                  MCStreamer &Out,
+                                                  uint64_t &ErrorInfo,
+                                                  bool MatchingInlineAsm) {
   MCInst Inst;
   unsigned MatchResult =
       MatchInstructionImpl(Operands, Inst, ErrorInfo, MatchingInlineAsm);

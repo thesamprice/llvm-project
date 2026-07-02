@@ -7,8 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "MicroBlazeRegisterInfo.h"
-#include "MicroBlaze.h"
 #include "MCTargetDesc/MicroBlazeMCTargetDesc.h"
+#include "MicroBlaze.h"
 #include "MicroBlazeSubtarget.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
@@ -53,8 +53,9 @@ MicroBlazeRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
 const uint32_t *
 MicroBlazeRegisterInfo::getCallPreservedMask(const MachineFunction &,
                                              CallingConv::ID CC) const {
-  // Keyed on the callee's CC only: a normal-CC call to a save_volatiles function
-  // uses the default mask (the caller does not rely on the extra preservation).
+  // Keyed on the callee's CC only: a normal-CC call to a save_volatiles
+  // function uses the default mask (the caller does not rely on the extra
+  // preservation).
   if (CC == CallingConv::MICROBLAZE_INTR || CC == CallingConv::MICROBLAZE_SVOL)
     return CSR_Interrupt_RegMask;
   return CSR_RegMask;
@@ -99,9 +100,10 @@ bool MicroBlazeRegisterInfo::requiresRegisterScavenging(
   return true;
 }
 
-bool MicroBlazeRegisterInfo::eliminateFrameIndex(
-    MachineBasicBlock::iterator II, int SPAdj, unsigned FIOperandNum,
-    RegScavenger *RS) const {
+bool MicroBlazeRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
+                                                 int SPAdj,
+                                                 unsigned FIOperandNum,
+                                                 RegScavenger *RS) const {
   MachineInstr &MI = *II;
   MachineFunction &MF = *MI.getParent()->getParent();
   const MachineFrameInfo &MFI = MF.getFrameInfo();

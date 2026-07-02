@@ -1,4 +1,5 @@
-//===-- MicroBlazeMCTargetDesc.h - MicroBlaze Target Descriptions *- C++ -*-===//
+//===-- MicroBlazeMCTargetDesc.h - MicroBlaze Target Descriptions *- C++
+//-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -22,12 +23,12 @@ class MCTargetOptions;
 class Target;
 
 MCCodeEmitter *createMicroBlazeMCCodeEmitter(const MCInstrInfo &MCII,
-                                              MCContext &Ctx);
+                                             MCContext &Ctx);
 
 MCAsmBackend *createMicroBlazeAsmBackend(const Target &T,
-                                          const MCSubtargetInfo &STI,
-                                          const MCRegisterInfo &MRI,
-                                          const MCTargetOptions &Options);
+                                         const MCSubtargetInfo &STI,
+                                         const MCRegisterInfo &MRI,
+                                         const MCTargetOptions &Options);
 
 std::unique_ptr<MCObjectTargetWriter> createMicroBlazeELFObjectWriter();
 

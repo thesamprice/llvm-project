@@ -7,7 +7,8 @@
 //===----------------------------------------------------------------------===//
 //
 // Target-independent branch delay-slot filler mechanism.  See
-// DelaySlotFillerBase.h for the algorithm overview and the policy-hook contract.
+// DelaySlotFillerBase.h for the algorithm overview and the policy-hook
+// contract.
 //
 //===----------------------------------------------------------------------===//
 
@@ -31,7 +32,8 @@ using namespace llvm;
 #define DEBUG_TYPE "delay-slot-filler"
 
 STATISTIC(FilledSlots, "Number of delay slots filled");
-STATISTIC(UsefulSlots, "Number of delay slots filled with non-NOP instructions");
+STATISTIC(UsefulSlots,
+          "Number of delay slots filled with non-NOP instructions");
 
 // ---------------------------------------------------------------------------
 // File-local helpers (target-independent)
@@ -180,8 +182,9 @@ bool DelaySlotFiller::runOnMachineFunction(MachineFunction &MF) {
         }
         // No delay slot follows; do not advance I.
       } else {
-        // No productive filler and no no-delay form (call or return): insert NOP
-        // and bundle it so the backward scanner cannot steal it for another slot.
+        // No productive filler and no no-delay form (call or return): insert
+        // NOP and bundle it so the backward scanner cannot steal it for another
+        // slot.
         insertNop(MBB, std::next(I), I->getDebugLoc());
         MIBundleBuilder(MBB, I.getInstrIterator(),
                         std::next(I.getInstrIterator(), 2));
@@ -207,10 +210,11 @@ bool DelaySlotFiller::searchBackward(
   BitVector BranchDefs(NumRegs), BranchUses(NumRegs);
   collectRegs(*BranchIt, TRI, BranchDefs, BranchUses);
 
-  // For calls and returns, implicit operands are argument/return-value registers
-  // that model calling-convention data flow rather than instruction reads.
-  // Build BranchGuardUses from explicit uses only so hoisting a last-argument
-  // setup (e.g., addik r5, r19, -1 before bralid r15, fib) is permitted.
+  // For calls and returns, implicit operands are argument/return-value
+  // registers that model calling-convention data flow rather than instruction
+  // reads. Build BranchGuardUses from explicit uses only so hoisting a
+  // last-argument setup (e.g., addik r5, r19, -1 before bralid r15, fib) is
+  // permitted.
   BitVector BranchGuardUses(NumRegs);
   if (BranchIt->isCall() || BranchIt->isReturn()) {
     for (const MachineOperand &MO : BranchIt->explicit_uses()) {
@@ -271,13 +275,19 @@ bool DelaySlotFiller::searchBackward(
     }
 
     // Register hazard checks.
-    if (overlaps(CandDefs, DefsAfter))  goto next;
-    if (overlaps(CandDefs, UsesAfter))  goto next;
-    if (overlaps(CandUses, DefsAfter))  goto next;
-    if (overlaps(CandDefs, BranchDefs)) goto next;
+    if (overlaps(CandDefs, DefsAfter))
+      goto next;
+    if (overlaps(CandDefs, UsesAfter))
+      goto next;
+    if (overlaps(CandUses, DefsAfter))
+      goto next;
+    if (overlaps(CandDefs, BranchDefs))
+      goto next;
     // Backedge guard: do not define a register the branch explicitly reads.
-    // BranchGuardUses excludes implicit (arg/return-value) regs for calls/returns.
-    if (overlaps(CandDefs, BranchGuardUses)) goto next;
+    // BranchGuardUses excludes implicit (arg/return-value) regs for
+    // calls/returns.
+    if (overlaps(CandDefs, BranchGuardUses))
+      goto next;
 
     // Memory alias check for loads: allow hoisting a frame-slot load past
     // stores to *different* frame slots; block everything else conservatively.
@@ -321,26 +331,22 @@ bool DelaySlotFiller::searchBackward(
 // Successor-block search
 // ---------------------------------------------------------------------------
 
-MachineBasicBlock *
-DelaySlotFiller::selectSuccBB(MachineBasicBlock &MBB) const {
+MachineBasicBlock *DelaySlotFiller::selectSuccBB(MachineBasicBlock &MBB) const {
   if (MBB.succ_empty())
     return nullptr;
-  auto &Prob =
-      getAnalysis<MachineBranchProbabilityInfoWrapperPass>().getMBPI();
+  auto &Prob = getAnalysis<MachineBranchProbabilityInfoWrapperPass>().getMBPI();
   MachineBasicBlock *S =
-      *llvm::max_element(MBB.successors(),
-                         [&](const MachineBasicBlock *A,
-                             const MachineBasicBlock *B) {
-                           return Prob.getEdgeProbability(&MBB, A) <
-                                  Prob.getEdgeProbability(&MBB, B);
-                         });
+      *llvm::max_element(MBB.successors(), [&](const MachineBasicBlock *A,
+                                               const MachineBasicBlock *B) {
+        return Prob.getEdgeProbability(&MBB, A) <
+               Prob.getEdgeProbability(&MBB, B);
+      });
   return S->isEHPad() ? nullptr : S;
 }
 
 bool DelaySlotFiller::examinePred(MachineBasicBlock &Pred,
                                   const MachineBasicBlock &Succ,
-                                  BitVector &BannedDefs,
-                                  bool &HasMultipleSuccs,
+                                  BitVector &BannedDefs, bool &HasMultipleSuccs,
                                   BB2BrMap &BrMap) const {
   // Walk backward through Pred's terminators looking for a branch to Succ.
   MachineInstr *BrMI = nullptr;
@@ -352,7 +358,10 @@ bool DelaySlotFiller::examinePred(MachineBasicBlock &Pred,
 
     bool TargetsSucc = false;
     for (const MachineOperand &MO : I->operands())
-      if (MO.isMBB() && MO.getMBB() == &Succ) { TargetsSucc = true; break; }
+      if (MO.isMBB() && MO.getMBB() == &Succ) {
+        TargetsSucc = true;
+        break;
+      }
 
     if (TargetsSucc) {
       // Must have an unoccupied delay slot to accept the clone.
@@ -384,7 +393,8 @@ bool DelaySlotFiller::examinePred(MachineBasicBlock &Pred,
   } else {
     // Fall-through case (push_back).  Only proceed if Pred has no terminal
     // branches at all; if there is any branch (even to another target) the
-    // clone would land in that branch's delay slot and require complex analysis.
+    // clone would land in that branch's delay slot and require complex
+    // analysis.
     for (auto I = Pred.rbegin(); I != Pred.rend(); ++I) {
       if (I->isDebugInstr() || I->isImplicitDef())
         continue;
@@ -448,8 +458,8 @@ bool DelaySlotFiller::searchSuccBBs(MachineBasicBlock &MBB,
     // Stop at anything that cannot be safely pre-executed.  Branch and break
     // instructions are forbidden (isBranch() and hasUnmodeledSideEffects()).
     if (MI.isBranch() || MI.isCall() || MI.isReturn() || MI.hasDelaySlot() ||
-        MI.mayStore() || MI.hasUnmodeledSideEffects() ||
-        MI.isInlineAsm() || MI.isPseudo())
+        MI.mayStore() || MI.hasUnmodeledSideEffects() || MI.isInlineAsm() ||
+        MI.isPseudo())
       break;
 
     // Multi-word / IMM-prefixed instructions are forbidden in the slot; keep
@@ -467,11 +477,10 @@ bool DelaySlotFiller::searchSuccBBs(MachineBasicBlock &MBB,
     CandUses.reset();
     collectRegs(MI, TRI, CandDefs, CandUses);
 
-    bool Safe = !overlaps(CandDefs, BannedDefs) &&
-                !overlaps(CandDefs, DefsAfter)  &&
-                !overlaps(CandDefs, UsesAfter)  &&
-                !overlaps(CandUses, DefsAfter)  &&
-                !overlaps(CandDefs, BranchGuardUses);
+    bool Safe =
+        !overlaps(CandDefs, BannedDefs) && !overlaps(CandDefs, DefsAfter) &&
+        !overlaps(CandDefs, UsesAfter) && !overlaps(CandUses, DefsAfter) &&
+        !overlaps(CandDefs, BranchGuardUses);
 
     if (Safe) {
       insertDelayFiller(I, BrMap);
@@ -522,9 +531,9 @@ bool DelaySlotFiller::searchJoinBB(MachineBasicBlock &MBB,
   // never on a path that bypasses JoinBB.  Require a clean diamond:
   //
   //   * every intermediate block (a successor of MBB other than JoinBB) has MBB
-  //     as its only predecessor and JoinBB as its only successor — otherwise the
-  //     moved instruction is either skipped (extra entry that bypasses the delay
-  //     slot) or runs spuriously (extra exit that never reaches JoinBB);
+  //     as its only predecessor and JoinBB as its only successor — otherwise
+  //     the moved instruction is either skipped (extra entry that bypasses the
+  //     delay slot) or runs spuriously (extra exit that never reaches JoinBB);
   //   * JoinBB is entered only from MBB (the taken edge) or an intermediate
   //     block — no external predecessor (loop backedge, shared label, goto)
   //     would otherwise skip the moved instruction.
@@ -555,8 +564,9 @@ bool DelaySlotFiller::searchJoinBB(MachineBasicBlock &MBB,
   //          (the block's later write would win on the fall-through path).
   // BannedDefs collects intermediate READS; InterDefs collects intermediate
   // WRITES.  We use explicit instruction reads (not live-ins) for BannedDefs to
-  // avoid false bans on registers that merely pass through an intermediate block
-  // unused (e.g. the pointer register in an ABS negation block running RSUBK).
+  // avoid false bans on registers that merely pass through an intermediate
+  // block unused (e.g. the pointer register in an ABS negation block running
+  // RSUBK).
   BitVector BannedDefs(NumRegs);
   BitVector InterDefs(NumRegs);
   bool InterHasStore = false;
@@ -607,8 +617,8 @@ bool DelaySlotFiller::searchJoinBB(MachineBasicBlock &MBB,
       continue;
 
     if (MI.isBranch() || MI.isCall() || MI.isReturn() || MI.hasDelaySlot() ||
-        MI.mayStore() || MI.hasUnmodeledSideEffects() ||
-        MI.isInlineAsm() || MI.isPseudo())
+        MI.mayStore() || MI.hasUnmodeledSideEffects() || MI.isInlineAsm() ||
+        MI.isPseudo())
       break;
 
     // Multi-word / IMM-prefixed instructions are forbidden in delay slots.
@@ -625,22 +635,23 @@ bool DelaySlotFiller::searchJoinBB(MachineBasicBlock &MBB,
     CandUses.reset();
     collectRegs(MI, TRI, CandDefs, CandUses);
 
-    bool Safe = !overlaps(CandDefs, BannedDefs)       &&  // WAR vs interm. reads
-                !overlaps(CandUses, InterDefs)         &&  // RAW vs interm. writes
-                !overlaps(CandDefs, InterDefs)         &&  // WAW vs interm. writes
-                !overlaps(CandDefs, BranchGuardUses)  &&
-                !overlaps(CandDefs, DefsAfter)         &&
-                !overlaps(CandDefs, UsesAfter)         &&
-                !overlaps(CandUses, DefsAfter)         &&
-                !(MI.mayLoad() && InterHasStore);          // memory RAW: interm. store may alias
+    bool Safe =
+        !overlaps(CandDefs, BannedDefs) && // WAR vs interm. reads
+        !overlaps(CandUses, InterDefs) &&  // RAW vs interm. writes
+        !overlaps(CandDefs, InterDefs) &&  // WAW vs interm. writes
+        !overlaps(CandDefs, BranchGuardUses) &&
+        !overlaps(CandDefs, DefsAfter) && !overlaps(CandDefs, UsesAfter) &&
+        !overlaps(CandUses, DefsAfter) &&
+        !(MI.mayLoad() && InterHasStore); // memory RAW: interm. store may alias
 
     if (Safe) {
       // MOVE MI from JoinBB into the delay slot.  No clone is needed because
       // the delay slot already executes on every path from MBB before reaching
-      // JoinBB, so correctness is preserved without duplicating the instruction.
+      // JoinBB, so correctness is preserved without duplicating the
+      // instruction.
       //
-      // addLiveInRegs must be called while I is still a valid iterator in JoinBB
-      // (before remove+insert invalidates the JoinBB context for I).
+      // addLiveInRegs must be called while I is still a valid iterator in
+      // JoinBB (before remove+insert invalidates the JoinBB context for I).
       addLiveInRegs(I, *JoinBB);
       JoinBB->remove(&MI);
       MBB.insert(std::next(Slot), &MI);

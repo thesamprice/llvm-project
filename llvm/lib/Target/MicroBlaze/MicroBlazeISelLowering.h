@@ -15,20 +15,23 @@
 namespace llvm {
 
 // Map an f32 ISD::CondCode to FCMP machine opcodes for BR_CC_FP / SELECT_CC_FP.
-// Opc1 is always set; Opc2 is nonzero for unordered conditions (OR two results).
-// Invert=true means branch/select fires when the FCMP result IS zero (SETO only).
-// Returns false if CC is not a valid f32 condition.
-bool getFCmpOpcodes(ISD::CondCode CC,
-                    unsigned &Opc1, unsigned &Opc2, bool &Invert);
+// Opc1 is always set; Opc2 is nonzero for unordered conditions (OR two
+// results). Invert=true means branch/select fires when the FCMP result IS zero
+// (SETO only). Returns false if CC is not a valid f32 condition.
+bool getFCmpOpcodes(ISD::CondCode CC, unsigned &Opc1, unsigned &Opc2,
+                    bool &Invert);
 
 namespace MicroBlazeISD {
 enum NodeType : unsigned {
   FIRST_NUMBER = ISD::BUILTIN_OP_END,
   RET_FLAG, // Return; operands are chain, glue, and optional return-value regs.
-  INTR_RET, // Interrupt-handler return (rtid r14, 0); same operands as RET_FLAG.
-  CALL,     // Direct or indirect call; operand 0 = chain, 1 = callee, rest = args.
-  Wrapper,  // Wraps a global/extern symbol for ADDIK-based address materialisation.
-  GOT_LOAD, // PIC GOT-indirect load: lwi rD, r20, sym@got (R_MICROBLAZE_GOT_64).
+  INTR_RET, // Interrupt-handler return (rtid r14, 0); same operands as
+            // RET_FLAG.
+  CALL, // Direct or indirect call; operand 0 = chain, 1 = callee, rest = args.
+  Wrapper,  // Wraps a global/extern symbol for ADDIK-based address
+            // materialisation.
+  GOT_LOAD, // PIC GOT-indirect load: lwi rD, r20, sym@got
+            // (R_MICROBLAZE_GOT_64).
   // Conditional branch after compare-to-zero:
   //   (chain, cond_as_ISD_CondCode_const, diff_reg, dest_bb)
   // diff_reg = LHS - RHS already computed; branch based on sign/zero of diff.
@@ -43,7 +46,8 @@ enum NodeType : unsigned {
   // SETLE→BGEID, SETGE→BLEID, SETEQ→BEQID, SETNE→BNEID).
   //   (chain, cond_as_ISD_CondCode_const, LHS, RHS, dest_bb)
   BR_CC_CMP,
-  // Signed conditional select using CMP; expanded by EmitInstrWithCustomInserter.
+  // Signed conditional select using CMP; expanded by
+  // EmitInstrWithCustomInserter.
   //   (TrueV, FalseV, CC_as_ISD_CondCode_const, LHS, RHS)
   SELECT_CC_CMP,
   // Unsigned conditional branch using the CMPU instruction (UG984 §5 Fig 84).
@@ -51,7 +55,8 @@ enum NodeType : unsigned {
   // compared to the CMP path.
   //   (chain, cond_as_ISD_CondCode_const, LHS, RHS, dest_bb)
   BR_CC_CMPU,
-  // Unsigned conditional select using CMPU; expanded by EmitInstrWithCustomInserter.
+  // Unsigned conditional select using CMPU; expanded by
+  // EmitInstrWithCustomInserter.
   //   (TrueV, FalseV, CC_as_ISD_CondCode_const, LHS, RHS)
   SELECT_CC_CMPU,
   // Float conditional branch using a hardware FCMP instruction (UG984 §5).
@@ -59,8 +64,9 @@ enum NodeType : unsigned {
   // else 0.0; the branch then fires on rResult != 0.
   //   (chain, cond_as_ISD_CondCode_const, LHS_f32, RHS_f32, dest_bb)
   BR_CC_FP,
-  // Float conditional select using FCMP; expanded by EmitInstrWithCustomInserter.
-  // TrueV/FalseV may be any type (i32 or f32); the comparison is always f32.
+  // Float conditional select using FCMP; expanded by
+  // EmitInstrWithCustomInserter. TrueV/FalseV may be any type (i32 or f32); the
+  // comparison is always f32.
   //   (TrueV, FalseV, CC_as_ISD_CondCode_const, LHS_f32, RHS_f32)
   SELECT_CC_FP,
   // Pattern-compare equality/inequality as integer 0/1 (ISD::SETCC value form).
@@ -74,16 +80,18 @@ enum NodeType : unsigned {
   // MSR_C is the physical carry register; it never allocates to a GPR.
   //
   // (result: i32, carry: i32) = ADDC(a, b)   → ADD  machine instruction
-  // (result: i32, carry: i32) = ADDE(a, b, carry_in: i32) → ADDC machine instruction
-  // (result: i32, carry: i32) = SUBC(a, b)   → RSUB machine instruction
-  // (result: i32, carry: i32) = SUBE(a, b, carry_in: i32) → RSUBC machine instruction
+  // (result: i32, carry: i32) = ADDE(a, b, carry_in: i32) → ADDC machine
+  // instruction (result: i32, carry: i32) = SUBC(a, b)   → RSUB machine
+  // instruction (result: i32, carry: i32) = SUBE(a, b, carry_in: i32) → RSUBC
+  // machine instruction
   ADDC,
   ADDE,
   SUBC,
   SUBE,
-  // Integer absolute value via a branch diamond (expanded by EmitInstrWithCustomInserter).
-  // The negation is placed on the fall-through (≤0) path only; src > 0 skips it.
-  // Avoids the default SRA+XOR+SUB 3-instruction arithmetic sequence.
+  // Integer absolute value via a branch diamond (expanded by
+  // EmitInstrWithCustomInserter). The negation is placed on the fall-through
+  // (≤0) path only; src > 0 skips it. Avoids the default SRA+XOR+SUB
+  // 3-instruction arithmetic sequence.
   ABS,
 };
 } // namespace MicroBlazeISD
@@ -162,7 +170,7 @@ private:
 
   MachineBasicBlock *
   EmitInstrWithCustomInserter(MachineInstr &MI,
-                               MachineBasicBlock *BB) const override;
+                              MachineBasicBlock *BB) const override;
 
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
 };

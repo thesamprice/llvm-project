@@ -35,8 +35,7 @@ public:
 
   ~MicroBlazeTargetMachine() override = default;
 
-  const MicroBlazeSubtarget *
-  getSubtargetImpl(const Function &F) const override;
+  const MicroBlazeSubtarget *getSubtargetImpl(const Function &F) const override;
 
   TargetLoweringObjectFile *getObjFileLowering() const override {
     return TLOF.get();

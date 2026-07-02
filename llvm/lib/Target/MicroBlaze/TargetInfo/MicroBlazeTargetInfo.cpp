@@ -20,6 +20,5 @@ Target &llvm::getTheMicroBlazeELTarget() {
 extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void
 LLVMInitializeMicroBlazeTargetInfo() {
   RegisterTarget<Triple::microblazeel, /*HasJIT=*/false> X(
-      getTheMicroBlazeELTarget(), "microblazeel", "MicroBlaze",
-      "MicroBlaze");
+      getTheMicroBlazeELTarget(), "microblazeel", "MicroBlaze", "MicroBlaze");
 }

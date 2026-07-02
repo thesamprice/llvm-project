@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MicroBlazeFixupKinds.h"
 #include "MCTargetDesc/MicroBlazeMCTargetDesc.h"
+#include "MicroBlazeFixupKinds.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/MC/MCELFObjectWriter.h"
 #include "llvm/MC/MCObjectWriter.h"
@@ -34,8 +34,8 @@ protected:
 } // end anonymous namespace
 
 unsigned MicroBlazeELFObjectWriter::getRelocType(const MCFixup &Fixup,
-                                                   const MCValue &Target,
-                                                   bool IsPCRel) const {
+                                                 const MCValue &Target,
+                                                 bool IsPCRel) const {
   unsigned Kind = Fixup.getKind();
   switch (Kind) {
   case MicroBlaze::FIXUP_MICROBLAZE_NONE:
@@ -63,7 +63,6 @@ unsigned MicroBlazeELFObjectWriter::getRelocType(const MCFixup &Fixup,
   }
 }
 
-std::unique_ptr<MCObjectTargetWriter>
-llvm::createMicroBlazeELFObjectWriter() {
+std::unique_ptr<MCObjectTargetWriter> llvm::createMicroBlazeELFObjectWriter() {
   return std::make_unique<MicroBlazeELFObjectWriter>();
 }

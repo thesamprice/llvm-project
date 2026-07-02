@@ -6,10 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MicroBlazeMCInstLower.h"
-#include "MicroBlazeSubtarget.h"
 #include "MCTargetDesc/MicroBlazeInstPrinter.h"
 #include "MCTargetDesc/MicroBlazeMCTargetDesc.h"
+#include "MicroBlazeMCInstLower.h"
+#include "MicroBlazeSubtarget.h"
 #include "TargetInfo/MicroBlazeTargetInfo.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -26,19 +26,21 @@ namespace {
 class MicroBlazeAsmPrinter : public AsmPrinter {
 public:
   explicit MicroBlazeAsmPrinter(TargetMachine &TM,
-                                 std::unique_ptr<MCStreamer> Streamer)
+                                std::unique_ptr<MCStreamer> Streamer)
       : AsmPrinter(TM, std::move(Streamer)) {}
 
   // The delay-slot filler inserts a NOP (non-terminator) between the branch
   // and the next real terminator, which breaks getFirstTerminator()'s backward
   // scan and causes the base class to incorrectly classify a branch-target
   // block as fall-through-only, suppressing its label.  Always emit labels.
-  bool isBlockOnlyReachableByFallthrough(
-      const MachineBasicBlock *) const override {
+  bool
+  isBlockOnlyReachableByFallthrough(const MachineBasicBlock *) const override {
     return false;
   }
 
-  StringRef getPassName() const override { return "MicroBlaze Assembly Printer"; }
+  StringRef getPassName() const override {
+    return "MicroBlaze Assembly Printer";
+  }
 
   void emitInstruction(const MachineInstr *MI) override;
   bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
@@ -63,9 +65,8 @@ void MicroBlazeAsmPrinter::emitInstruction(const MachineInstr *MI) {
 }
 
 bool MicroBlazeAsmPrinter::PrintAsmOperand(const MachineInstr *MI,
-                                            unsigned OpNo,
-                                            const char *ExtraCode,
-                                            raw_ostream &O) {
+                                           unsigned OpNo, const char *ExtraCode,
+                                           raw_ostream &O) {
   if (ExtraCode && ExtraCode[0])
     return AsmPrinter::PrintAsmOperand(MI, OpNo, ExtraCode, O);
   const MachineOperand &MO = MI->getOperand(OpNo);

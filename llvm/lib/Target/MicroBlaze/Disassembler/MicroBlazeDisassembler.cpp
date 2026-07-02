@@ -36,15 +36,14 @@ typedef MCDisassembler::DecodeStatus DecodeStatus;
 
 // MicroBlaze R0-R31 map hardware encoding 0-31 directly to register IDs.
 static const unsigned GPRDecoderTable[] = {
-  MicroBlaze::R0,  MicroBlaze::R1,  MicroBlaze::R2,  MicroBlaze::R3,
-  MicroBlaze::R4,  MicroBlaze::R5,  MicroBlaze::R6,  MicroBlaze::R7,
-  MicroBlaze::R8,  MicroBlaze::R9,  MicroBlaze::R10, MicroBlaze::R11,
-  MicroBlaze::R12, MicroBlaze::R13, MicroBlaze::R14, MicroBlaze::R15,
-  MicroBlaze::R16, MicroBlaze::R17, MicroBlaze::R18, MicroBlaze::R19,
-  MicroBlaze::R20, MicroBlaze::R21, MicroBlaze::R22, MicroBlaze::R23,
-  MicroBlaze::R24, MicroBlaze::R25, MicroBlaze::R26, MicroBlaze::R27,
-  MicroBlaze::R28, MicroBlaze::R29, MicroBlaze::R30, MicroBlaze::R31
-};
+    MicroBlaze::R0,  MicroBlaze::R1,  MicroBlaze::R2,  MicroBlaze::R3,
+    MicroBlaze::R4,  MicroBlaze::R5,  MicroBlaze::R6,  MicroBlaze::R7,
+    MicroBlaze::R8,  MicroBlaze::R9,  MicroBlaze::R10, MicroBlaze::R11,
+    MicroBlaze::R12, MicroBlaze::R13, MicroBlaze::R14, MicroBlaze::R15,
+    MicroBlaze::R16, MicroBlaze::R17, MicroBlaze::R18, MicroBlaze::R19,
+    MicroBlaze::R20, MicroBlaze::R21, MicroBlaze::R22, MicroBlaze::R23,
+    MicroBlaze::R24, MicroBlaze::R25, MicroBlaze::R26, MicroBlaze::R27,
+    MicroBlaze::R28, MicroBlaze::R29, MicroBlaze::R30, MicroBlaze::R31};
 
 static DecodeStatus DecodeGPRRegisterClass(MCInst &Inst, unsigned RegNo,
                                            uint64_t /*Address*/,
@@ -68,15 +67,16 @@ static DecodeStatus DecodeFPRRegisterClass(MCInst &Inst, unsigned RegNo,
 // RFSL port registers rfsl0-rfsl15. Hardware encoding is the 4-bit port index
 // placed in instruction bits[7:4] for static FSL get/put (opcode 0x1B).
 static const unsigned RFSLDecoderTable[] = {
-  MicroBlaze::rfsl0,  MicroBlaze::rfsl1,  MicroBlaze::rfsl2,  MicroBlaze::rfsl3,
-  MicroBlaze::rfsl4,  MicroBlaze::rfsl5,  MicroBlaze::rfsl6,  MicroBlaze::rfsl7,
-  MicroBlaze::rfsl8,  MicroBlaze::rfsl9,  MicroBlaze::rfsl10, MicroBlaze::rfsl11,
-  MicroBlaze::rfsl12, MicroBlaze::rfsl13, MicroBlaze::rfsl14, MicroBlaze::rfsl15
-};
+    MicroBlaze::rfsl0,  MicroBlaze::rfsl1,  MicroBlaze::rfsl2,
+    MicroBlaze::rfsl3,  MicroBlaze::rfsl4,  MicroBlaze::rfsl5,
+    MicroBlaze::rfsl6,  MicroBlaze::rfsl7,  MicroBlaze::rfsl8,
+    MicroBlaze::rfsl9,  MicroBlaze::rfsl10, MicroBlaze::rfsl11,
+    MicroBlaze::rfsl12, MicroBlaze::rfsl13, MicroBlaze::rfsl14,
+    MicroBlaze::rfsl15};
 
-static DecodeStatus DecodeRFSLRegisterClass(MCInst &Inst, unsigned RegNo,
-                                            uint64_t /*Address*/,
-                                            const MCDisassembler * /*Decoder*/) {
+static DecodeStatus
+DecodeRFSLRegisterClass(MCInst &Inst, unsigned RegNo, uint64_t /*Address*/,
+                        const MCDisassembler * /*Decoder*/) {
   if (RegNo > 15)
     return MCDisassembler::Fail;
   Inst.addOperand(MCOperand::createReg(RFSLDecoderTable[RegNo]));
@@ -103,7 +103,7 @@ static DecodeStatus decodeMemRROperand(MCInst &Inst, unsigned Val,
                                        uint64_t /*Address*/,
                                        const MCDisassembler * /*Decoder*/) {
   unsigned Base = (Val >> 5) & 0x1F;
-  unsigned Idx  = Val & 0x1F;
+  unsigned Idx = Val & 0x1F;
   if (Base > 31 || Idx > 31)
     return MCDisassembler::Fail;
   Inst.addOperand(MCOperand::createReg(GPRDecoderTable[Base]));
@@ -127,8 +127,8 @@ static DecodeStatus readInstruction32(ArrayRef<uint8_t> Bytes, uint64_t &Size,
   }
   Insn = (static_cast<uint32_t>(Bytes[3]) << 24) |
          (static_cast<uint32_t>(Bytes[2]) << 16) |
-         (static_cast<uint32_t>(Bytes[1]) <<  8) |
-         (static_cast<uint32_t>(Bytes[0]) <<  0);
+         (static_cast<uint32_t>(Bytes[1]) << 8) |
+         (static_cast<uint32_t>(Bytes[0]) << 0);
   return MCDisassembler::Success;
 }
 
@@ -136,18 +136,15 @@ static DecodeStatus readInstruction32(ArrayRef<uint8_t> Bytes, uint64_t &Size,
 // Main disassembly entry point
 // ===----------------------------------------------------------------------===
 
-DecodeStatus MicroBlazeDisassembler::getInstruction(MCInst &Instr,
-                                                     uint64_t &Size,
-                                                     ArrayRef<uint8_t> Bytes,
-                                                     uint64_t Address,
-                                                     raw_ostream & /*CStream*/) const {
+DecodeStatus MicroBlazeDisassembler::getInstruction(
+    MCInst &Instr, uint64_t &Size, ArrayRef<uint8_t> Bytes, uint64_t Address,
+    raw_ostream & /*CStream*/) const {
   uint32_t Insn;
   DecodeStatus Result = readInstruction32(Bytes, Size, Insn);
   if (Result == MCDisassembler::Fail)
     return MCDisassembler::Fail;
 
-  Result = decodeInstruction(DecoderTable32, Instr, Insn, Address,
-                             this, STI);
+  Result = decodeInstruction(DecoderTable32, Instr, Insn, Address, this, STI);
   if (Result != MCDisassembler::Fail) {
     Size = 4;
     return Result;
@@ -160,8 +157,8 @@ DecodeStatus MicroBlazeDisassembler::getInstruction(MCInst &Instr,
 // ===----------------------------------------------------------------------===
 
 static MCDisassembler *createMicroBlazeDisassembler(const Target & /*T*/,
-                                                     const MCSubtargetInfo &STI,
-                                                     MCContext &Ctx) {
+                                                    const MCSubtargetInfo &STI,
+                                                    MCContext &Ctx) {
   return new MicroBlazeDisassembler(STI, Ctx);
 }
 

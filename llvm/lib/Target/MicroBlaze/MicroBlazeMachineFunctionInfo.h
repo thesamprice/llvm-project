@@ -1,4 +1,5 @@
-//===-- MicroBlazeMachineFunctionInfo.h - MicroBlaze Function Info -*-C++-*-===//
+//===-- MicroBlazeMachineFunctionInfo.h - MicroBlaze Function Info
+//-*-C++-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -20,7 +21,8 @@ class MicroBlazeMachineFunctionInfo : public MachineFunctionInfo {
   int LRSpillSlot = -1;
   // Size of the outgoing argument area reserved in the stack frame.
   unsigned OutArgRegSize = 0;
-  // Frame index of the vararg register save area (valid only in vararg functions).
+  // Frame index of the vararg register save area (valid only in vararg
+  // functions).
   int VarArgsFrameIndex = 0;
   // Number of bytes saved for incoming register varargs (0 if none).
   int VarArgsSaveSize = 0;

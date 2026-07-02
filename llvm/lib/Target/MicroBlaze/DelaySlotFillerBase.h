@@ -98,10 +98,10 @@ protected:
 
   /// When no filler is found and a no-delay form exists, choose between keeping
   /// the delay form with a NOP (return true) and demoting to the no-delay form
-  /// (return false).  IsBackwardBranch is true for loop back-edges.  Targets may
-  /// override to make this pipeline-dependent; the default keeps the delay form
-  /// with a NOP for backward branches (taken nearly every iteration) and demotes
-  /// forward branches (cheaper not-taken).
+  /// (return false).  IsBackwardBranch is true for loop back-edges.  Targets
+  /// may override to make this pipeline-dependent; the default keeps the delay
+  /// form with a NOP for backward branches (taken nearly every iteration) and
+  /// demotes forward branches (cheaper not-taken).
   virtual bool preferNopOverDemote(const MachineInstr &Br,
                                    bool IsBackwardBranch) const {
     return IsBackwardBranch;

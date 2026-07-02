@@ -58,18 +58,19 @@ MicroBlaze::MicroBlaze(Ctx &ctx) : TargetInfo(ctx) {
   gotEntrySize = 4;
   // Dynamic reloc types needed by the generic GOT/PLT infrastructure.
   relativeRel = R_MICROBLAZE_REL;
-  gotRel      = R_MICROBLAZE_GLOB_DAT;
-  pltRel      = R_MICROBLAZE_JUMP_SLOT;
-  copyRel     = R_MICROBLAZE_COPY;
+  gotRel = R_MICROBLAZE_GLOB_DAT;
+  pltRel = R_MICROBLAZE_JUMP_SLOT;
+  copyRel = R_MICROBLAZE_COPY;
 }
 
 RelExpr MicroBlaze::getRelExpr(RelType type, const Symbol &s,
-                                const uint8_t *loc) const {
+                               const uint8_t *loc) const {
   switch (type) {
   case R_MICROBLAZE_NONE:
   case R_MICROBLAZE_64_NONE:
   case R_MICROBLAZE_32_NONE:
-  case R_MICROBLAZE_32_PCREL_LO: // placeholder low-half of R_MICROBLAZE_64_PCREL pair
+  case R_MICROBLAZE_32_PCREL_LO: // placeholder low-half of
+                                 // R_MICROBLAZE_64_PCREL pair
   case R_MICROBLAZE_32_LO:       // placeholder low-half of R_MICROBLAZE_64 pair
     return R_NONE;
   case R_MICROBLAZE_64_PCREL:
@@ -87,7 +88,7 @@ RelExpr MicroBlaze::getRelExpr(RelType type, const Symbol &s,
 }
 
 void MicroBlaze::relocate(uint8_t *loc, const Relocation &rel,
-                           uint64_t val) const {
+                          uint64_t val) const {
   switch (rel.type) {
   case R_MICROBLAZE_NONE:
   case R_MICROBLAZE_64_NONE:
@@ -107,7 +108,7 @@ void MicroBlaze::relocate(uint8_t *loc, const Relocation &rel,
     // IMM+instruction pair (absolute).
     // Upper 16 bits into IMM instruction bits[15:0] (LE bytes 0-1).
     // Lower 16 bits into following instruction bits[15:0] (LE bytes 4-5).
-    write16le(loc,     (val >> 16) & 0xFFFF);
+    write16le(loc, (val >> 16) & 0xFFFF);
     write16le(loc + 4, val & 0xFFFF);
     break;
   }
@@ -117,7 +118,7 @@ void MicroBlaze::relocate(uint8_t *loc, const Relocation &rel,
     // LLD gives val = S+A-P where P = address of IMM instruction.
     // MicroBlaze branch uses PC = IMM+4, so subtract 4 from val.
     int64_t offset = static_cast<int64_t>(val) - 4;
-    write16le(loc,     (offset >> 16) & 0xFFFF);
+    write16le(loc, (offset >> 16) & 0xFFFF);
     write16le(loc + 4, offset & 0xFFFF);
     break;
   }
@@ -126,7 +127,7 @@ void MicroBlaze::relocate(uint8_t *loc, const Relocation &rel,
     // IMM+LWI pair (GOT-relative).
     // val = address of GOT entry - GOT base (R20).
     // Patch: IMM bits[15:0] = HI16(val), LWI bits[15:0] = LO16(val).
-    write16le(loc,     (val >> 16) & 0xFFFF);
+    write16le(loc, (val >> 16) & 0xFFFF);
     write16le(loc + 4, val & 0xFFFF);
     break;
   }
@@ -135,7 +136,7 @@ void MicroBlaze::relocate(uint8_t *loc, const Relocation &rel,
     // IMM+branch pair (PLT, PC-relative from IMM instruction address).
     // Same adjustment as 64_PCREL: branch PC = IMM+4.
     int64_t offset = static_cast<int64_t>(val) - 4;
-    write16le(loc,     (offset >> 16) & 0xFFFF);
+    write16le(loc, (offset >> 16) & 0xFFFF);
     write16le(loc + 4, offset & 0xFFFF);
     break;
   }
@@ -144,7 +145,7 @@ void MicroBlaze::relocate(uint8_t *loc, const Relocation &rel,
     // IMM+ADDIK pair (PC-relative GOT pointer setup).
     // val = GOT_base - (IMM_address + 4).
     int64_t offset = static_cast<int64_t>(val) - 4;
-    write16le(loc,     (offset >> 16) & 0xFFFF);
+    write16le(loc, (offset >> 16) & 0xFFFF);
     write16le(loc + 4, offset & 0xFFFF);
     break;
   }
@@ -159,8 +160,7 @@ void MicroBlaze::relocate(uint8_t *loc, const Relocation &rel,
     break;
 
   default:
-    Err(ctx) << getErrorLoc(ctx, loc) << "unrecognized relocation "
-             << rel.type;
+    Err(ctx) << getErrorLoc(ctx, loc) << "unrecognized relocation " << rel.type;
   }
 }
 

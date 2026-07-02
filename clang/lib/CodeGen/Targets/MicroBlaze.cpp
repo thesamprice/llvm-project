@@ -55,13 +55,11 @@ ABIArgInfo MicroBlazeABIInfo::classifyArgumentType(QualType Ty) const {
       if (RAA == CGCXXABI::RAA_Indirect)
         return getNaturalAlignIndirectInReg(Ty);
       if (RAA == CGCXXABI::RAA_DirectInMemory)
-        return getNaturalAlignIndirect(Ty,
-                                       getDataLayout().getAllocaAddrSpace(),
+        return getNaturalAlignIndirect(Ty, getDataLayout().getAllocaAddrSpace(),
                                        /*ByVal=*/true);
       // Structs with flexible arrays must be indirect.
       if (RT->getDecl()->getDefinitionOrSelf()->hasFlexibleArrayMember())
-        return getNaturalAlignIndirect(Ty,
-                                       getDataLayout().getAllocaAddrSpace(),
+        return getNaturalAlignIndirect(Ty, getDataLayout().getAllocaAddrSpace(),
                                        /*ByVal=*/true);
     }
 
@@ -103,8 +101,7 @@ ABIArgInfo MicroBlazeABIInfo::classifyReturnType(QualType RetTy) const {
       return ABIArgInfo::getDirect(CoerceTy);
     }
     // Large aggregates: return via hidden sret pointer (first argument).
-    return getNaturalAlignIndirect(RetTy,
-                                   getDataLayout().getAllocaAddrSpace());
+    return getNaturalAlignIndirect(RetTy, getDataLayout().getAllocaAddrSpace());
   }
 
   if (const auto *ED = RetTy->getAsEnumDecl())
@@ -140,9 +137,9 @@ void MicroBlazeTargetCodeGenInfo::setTargetAttributes(
   // properties: the function preserves extra registers (and, for an interrupt,
   // MSR + rtid), but callers still call it normally.  Encoding this as a
   // function attribute — rather than a distinct calling convention — keeps the
-  // call sites unchanged (a CC mismatch between a default-CC call and a cc73/cc74
-  // callee is UB and would delete the call).  MicroBlazeFrameLowering keys the
-  // save/restore + return behavior off these attributes.
+  // call sites unchanged (a CC mismatch between a default-CC call and a
+  // cc73/cc74 callee is UB and would delete the call).  MicroBlazeFrameLowering
+  // keys the save/restore + return behavior off these attributes.
   if (FD->hasAttr<MicroBlazeInterruptHandlerAttr>()) {
     F->addFnAttr("interrupt-handler");
     F->addFnAttr(llvm::Attribute::NoInline);

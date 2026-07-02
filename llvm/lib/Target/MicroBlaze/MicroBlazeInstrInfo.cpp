@@ -24,10 +24,11 @@ MicroBlazeInstrInfo::MicroBlazeInstrInfo(const MicroBlazeSubtarget &STI)
       RI() {}
 
 void MicroBlazeInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
-                                       MachineBasicBlock::iterator I,
-                                       const DebugLoc &DL, Register DstReg,
-                                       Register SrcReg, bool KillSrc,
-                                       bool RenamableDst, bool RenamableSrc) const {
+                                      MachineBasicBlock::iterator I,
+                                      const DebugLoc &DL, Register DstReg,
+                                      Register SrcReg, bool KillSrc,
+                                      bool RenamableDst,
+                                      bool RenamableSrc) const {
   // addk DstReg, SrcReg, R0  (= SrcReg + 0 = SrcReg)
   BuildMI(MBB, I, DL, get(MicroBlaze::ADDK), DstReg)
       .addReg(SrcReg, getKillRegState(KillSrc))
@@ -67,12 +68,18 @@ static bool isUncondBranchOpcode(unsigned Opc) {
 
 static bool isCondBranchOpcode(unsigned Opc) {
   switch (Opc) {
-  case MicroBlaze::BEQID: case MicroBlaze::BNEID:
-  case MicroBlaze::BLTID: case MicroBlaze::BLEID:
-  case MicroBlaze::BGTID: case MicroBlaze::BGEID:
-  case MicroBlaze::BEQI:  case MicroBlaze::BNEI:
-  case MicroBlaze::BLTI:  case MicroBlaze::BLEI:
-  case MicroBlaze::BGTI:  case MicroBlaze::BGEI:
+  case MicroBlaze::BEQID:
+  case MicroBlaze::BNEID:
+  case MicroBlaze::BLTID:
+  case MicroBlaze::BLEID:
+  case MicroBlaze::BGTID:
+  case MicroBlaze::BGEID:
+  case MicroBlaze::BEQI:
+  case MicroBlaze::BNEI:
+  case MicroBlaze::BLTI:
+  case MicroBlaze::BLEI:
+  case MicroBlaze::BGTI:
+  case MicroBlaze::BGEI:
     return true;
   default:
     return false;
@@ -81,37 +88,50 @@ static bool isCondBranchOpcode(unsigned Opc) {
 
 static unsigned getOppositeBranchOpc(unsigned Opc) {
   switch (Opc) {
-  case MicroBlaze::BEQID: return MicroBlaze::BNEID;
-  case MicroBlaze::BNEID: return MicroBlaze::BEQID;
-  case MicroBlaze::BLTID: return MicroBlaze::BGEID;
-  case MicroBlaze::BGEID: return MicroBlaze::BLTID;
-  case MicroBlaze::BLEID: return MicroBlaze::BGTID;
-  case MicroBlaze::BGTID: return MicroBlaze::BLEID;
-  case MicroBlaze::BEQI:  return MicroBlaze::BNEI;
-  case MicroBlaze::BNEI:  return MicroBlaze::BEQI;
-  case MicroBlaze::BLTI:  return MicroBlaze::BGEI;
-  case MicroBlaze::BGEI:  return MicroBlaze::BLTI;
-  case MicroBlaze::BLEI:  return MicroBlaze::BGTI;
-  case MicroBlaze::BGTI:  return MicroBlaze::BLEI;
+  case MicroBlaze::BEQID:
+    return MicroBlaze::BNEID;
+  case MicroBlaze::BNEID:
+    return MicroBlaze::BEQID;
+  case MicroBlaze::BLTID:
+    return MicroBlaze::BGEID;
+  case MicroBlaze::BGEID:
+    return MicroBlaze::BLTID;
+  case MicroBlaze::BLEID:
+    return MicroBlaze::BGTID;
+  case MicroBlaze::BGTID:
+    return MicroBlaze::BLEID;
+  case MicroBlaze::BEQI:
+    return MicroBlaze::BNEI;
+  case MicroBlaze::BNEI:
+    return MicroBlaze::BEQI;
+  case MicroBlaze::BLTI:
+    return MicroBlaze::BGEI;
+  case MicroBlaze::BGEI:
+    return MicroBlaze::BLTI;
+  case MicroBlaze::BLEI:
+    return MicroBlaze::BGTI;
+  case MicroBlaze::BGTI:
+    return MicroBlaze::BLEI;
   default:
     llvm_unreachable("Not a conditional branch opcode");
   }
 }
 
 // Cond[0] = opcode-as-imm, Cond[1] = the register operand.
-// CBranchID layout: (ins GPR:$rA, brtarget:$imm) → operand(0)=reg, operand(1)=MBB.
+// CBranchID layout: (ins GPR:$rA, brtarget:$imm) → operand(0)=reg,
+// operand(1)=MBB.
 static void parseCondBranch(MachineInstr &MI, MachineBasicBlock *&Target,
-                             SmallVectorImpl<MachineOperand> &Cond) {
+                            SmallVectorImpl<MachineOperand> &Cond) {
   Target = MI.getOperand(1).getMBB();
   Cond.push_back(MachineOperand::CreateImm(MI.getOpcode()));
   Cond.push_back(MI.getOperand(0));
 }
 
 bool MicroBlazeInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
-                                         MachineBasicBlock *&TBB,
-                                         MachineBasicBlock *&FBB,
-                                         SmallVectorImpl<MachineOperand> &Cond,
-                                         bool /*AllowModify*/) const {
+                                        MachineBasicBlock *&TBB,
+                                        MachineBasicBlock *&FBB,
+                                        SmallVectorImpl<MachineOperand> &Cond,
+                                        bool /*AllowModify*/) const {
   TBB = nullptr;
   FBB = nullptr;
   Cond.clear();
@@ -165,7 +185,7 @@ bool MicroBlazeInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
 }
 
 unsigned MicroBlazeInstrInfo::removeBranch(MachineBasicBlock &MBB,
-                                            int *BytesRemoved) const {
+                                           int *BytesRemoved) const {
   MachineBasicBlock::iterator I = MBB.end();
   unsigned Count = 0;
   while (I != MBB.begin()) {
@@ -190,12 +210,9 @@ bool MicroBlazeInstrInfo::reverseBranchCondition(
   return false;
 }
 
-unsigned MicroBlazeInstrInfo::insertBranch(MachineBasicBlock &MBB,
-                                            MachineBasicBlock *TBB,
-                                            MachineBasicBlock *FBB,
-                                            ArrayRef<MachineOperand> Cond,
-                                            const DebugLoc &DL,
-                                            int *BytesAdded) const {
+unsigned MicroBlazeInstrInfo::insertBranch(
+    MachineBasicBlock &MBB, MachineBasicBlock *TBB, MachineBasicBlock *FBB,
+    ArrayRef<MachineOperand> Cond, const DebugLoc &DL, int *BytesAdded) const {
   assert(TBB && "insertBranch must not be told to insert a fallthrough");
   assert((!FBB || Cond.size() == 2) && "Unexpected operands");
 
@@ -223,7 +240,7 @@ unsigned MicroBlazeInstrInfo::insertBranch(MachineBasicBlock &MBB,
 }
 
 bool MicroBlazeInstrInfo::isBranchOffsetInRange(unsigned /*BranchOpc*/,
-                                                  int64_t BrOffset) const {
+                                                int64_t BrOffset) const {
   return isInt<16>(BrOffset);
 }
 
@@ -238,8 +255,8 @@ MicroBlazeInstrInfo::getBranchDestBlock(const MachineInstr &MI) const {
 
 void MicroBlazeInstrInfo::insertIndirectBranch(
     MachineBasicBlock &MBB, MachineBasicBlock &DestBB,
-    MachineBasicBlock & /*RestoreBB*/, const DebugLoc &DL,
-    int64_t /*BrOffset*/, RegScavenger * /*RS*/) const {
+    MachineBasicBlock & /*RestoreBB*/, const DebugLoc &DL, int64_t /*BrOffset*/,
+    RegScavenger * /*RS*/) const {
   // IMM+BRID provides a 32-bit PC-relative range; no scratch register needed.
   // The MCCodeEmitter automatically prepends an IMM prefix for far MBB targets.
   // Emit only the BRID barrier here: the delay-slot filler runs after
@@ -256,8 +273,8 @@ bool MicroBlazeInstrInfo::isLoadInstruction(const MachineInstr &MI) const {
   return MI.mayLoad() && !MI.mayStore();
 }
 
-bool MicroBlazeInstrInfo::isSafeInLoadDelaySlot(const MachineInstr &Filler,
-                                                 const MachineInstr &Load) const {
+bool MicroBlazeInstrInfo::isSafeInLoadDelaySlot(
+    const MachineInstr &Filler, const MachineInstr &Load) const {
   assert(isLoadInstruction(Load) && "Load must be a load instruction");
   // MicroBlaze 2-cycle load-to-use latency (IIC_LD=2 in MicroBlazeSchedule.td):
   //   Load at pipeline stage N → result available at N+2.

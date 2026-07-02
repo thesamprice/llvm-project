@@ -27,14 +27,15 @@
 //                     word; after the callee returns, the actual instruction
 //                     word is silently skipped; (b) for branch delay slots, the
 //                 IMM latch leaks into the first instruction at the branch
-//                 target.  Enforced by needsMultiWordEncoding() (needsImmPrefix).
-//                 (IMML is the 64-bit variant used by MB-X; not yet in this
-//                 backend, but needsImmPrefix() would catch it the same way.)
+//                 target.  Enforced by needsMultiWordEncoding()
+//                 (needsImmPrefix). (IMML is the 64-bit variant used by MB-X;
+//                 not yet in this backend, but needsImmPrefix() would catch it
+//                 the same way.)
 //
 //   Branch      — A branch instruction in a delay slot is architecturally
-//                 undefined (UG984 §2).  Enforced by MI.isBranch() in the shared
-//                 scan loops; the check also stops the backward scan from
-//                 crossing any earlier branch boundary.
+//                 undefined (UG984 §2).  Enforced by MI.isBranch() in the
+//                 shared scan loops; the check also stops the backward scan
+//                 from crossing any earlier branch boundary.
 //
 //   Break       — BRK / BRKI transfer to the break handler; placing one in a
 //                 delay slot is architecturally prohibited (UG984 §2).  Both
@@ -65,8 +66,8 @@
 // filler's placement is pipeline-independent.  What differs is scheduling
 // latency (modelled in MicroBlazeSchedule.td: MicroBlazeSpeedModel vs
 // MicroBlazeAreaModel) and, potentially, branch-penalty-driven profitability.
-// The load-use hook routes through MicroBlazeInstrInfo::isSafeInLoadDelaySlot so
-// per-pipeline behavior can live in one place; see hasLoadUseHazard below.
+// The load-use hook routes through MicroBlazeInstrInfo::isSafeInLoadDelaySlot
+// so per-pipeline behavior can live in one place; see hasLoadUseHazard below.
 //
 //===----------------------------------------------------------------------===//
 
@@ -106,26 +107,43 @@ STATISTIC(SunkPreIncrements,
 static unsigned getNoDelayVariant(unsigned Opc) {
   switch (Opc) {
   // Unconditional branches — immediate target
-  case MicroBlaze::BRID:  return MicroBlaze::BRI;
-  case MicroBlaze::BRAID: return MicroBlaze::BRAI;
+  case MicroBlaze::BRID:
+    return MicroBlaze::BRI;
+  case MicroBlaze::BRAID:
+    return MicroBlaze::BRAI;
   // Unconditional branches — register target
-  case MicroBlaze::BRD:   return MicroBlaze::BR_;
-  case MicroBlaze::BRAD:  return MicroBlaze::BRA;
+  case MicroBlaze::BRD:
+    return MicroBlaze::BR_;
+  case MicroBlaze::BRAD:
+    return MicroBlaze::BRA;
   // Conditional branches — immediate target
-  case MicroBlaze::BEQID: return MicroBlaze::BEQI;
-  case MicroBlaze::BNEID: return MicroBlaze::BNEI;
-  case MicroBlaze::BLTID: return MicroBlaze::BLTI;
-  case MicroBlaze::BLEID: return MicroBlaze::BLEI;
-  case MicroBlaze::BGTID: return MicroBlaze::BGTI;
-  case MicroBlaze::BGEID: return MicroBlaze::BGEI;
+  case MicroBlaze::BEQID:
+    return MicroBlaze::BEQI;
+  case MicroBlaze::BNEID:
+    return MicroBlaze::BNEI;
+  case MicroBlaze::BLTID:
+    return MicroBlaze::BLTI;
+  case MicroBlaze::BLEID:
+    return MicroBlaze::BLEI;
+  case MicroBlaze::BGTID:
+    return MicroBlaze::BGTI;
+  case MicroBlaze::BGEID:
+    return MicroBlaze::BGEI;
   // Conditional branches — register target
-  case MicroBlaze::BEQD:  return MicroBlaze::BEQ;
-  case MicroBlaze::BNED:  return MicroBlaze::BNE;
-  case MicroBlaze::BLTD:  return MicroBlaze::BLT;
-  case MicroBlaze::BLED:  return MicroBlaze::BLE;
-  case MicroBlaze::BGTD:  return MicroBlaze::BGT;
-  case MicroBlaze::BGED:  return MicroBlaze::BGE;
-  default: return 0;
+  case MicroBlaze::BEQD:
+    return MicroBlaze::BEQ;
+  case MicroBlaze::BNED:
+    return MicroBlaze::BNE;
+  case MicroBlaze::BLTD:
+    return MicroBlaze::BLT;
+  case MicroBlaze::BLED:
+    return MicroBlaze::BLE;
+  case MicroBlaze::BGTD:
+    return MicroBlaze::BGT;
+  case MicroBlaze::BGED:
+    return MicroBlaze::BGE;
+  default:
+    return 0;
   }
 }
 
@@ -182,11 +200,15 @@ static bool hoistCopyToDelaySlot(MachineBasicBlock &MBB) {
 
   for (auto I = MBB.begin(), E = MBB.end(); I != E;) {
     // Match: addk rX, rY, R0
-    if (I->getOpcode() != MicroBlaze::ADDK) { ++I; continue; }
+    if (I->getOpcode() != MicroBlaze::ADDK) {
+      ++I;
+      continue;
+    }
     Register rX = I->getOperand(0).getReg();
     Register rY = I->getOperand(1).getReg();
     if (I->getOperand(2).getReg() != MicroBlaze::R0 || rX == rY) {
-      ++I; continue;
+      ++I;
+      continue;
     }
 
     auto Addk = I++;
@@ -200,12 +222,18 @@ static bool hoistCopyToDelaySlot(MachineBasicBlock &MBB) {
       // Abort if any instruction redefines rX or rY.
       bool Abort = false;
       for (const MachineOperand &MO : J->operands()) {
-        if (!MO.isReg() || !MO.isDef()) continue;
-        if (MO.getReg() == rX || MO.getReg() == rY) { Abort = true; break; }
+        if (!MO.isReg() || !MO.isDef())
+          continue;
+        if (MO.getReg() == rX || MO.getReg() == rY) {
+          Abort = true;
+          break;
+        }
       }
-      if (Abort) break;
+      if (Abort)
+        break;
 
-      if (J->isCall() || J->isReturn()) break;
+      if (J->isCall() || J->isReturn())
+        break;
 
       if (J->isBranch()) {
         // Only match an unoccupied D-form backward branch: taken nearly every
@@ -224,7 +252,8 @@ static bool hoistCopyToDelaySlot(MachineBasicBlock &MBB) {
       }
     }
 
-    if (BranchIt == E) continue;
+    if (BranchIt == E)
+      continue;
 
     // Substitute every USE of rX with rY in [Addk+1 .. BranchIt] inclusive.
     // The branch is included so that a branch that directly tests rX (e.g.
@@ -283,35 +312,46 @@ static bool sinkPreIncrements(MachineBasicBlock &MBB) {
 
   for (auto I = MBB.begin(), E = MBB.end(); I != E;) {
     // Match: addk rA, rB, R0
-    if (I->getOpcode() != MicroBlaze::ADDK) { ++I; continue; }
+    if (I->getOpcode() != MicroBlaze::ADDK) {
+      ++I;
+      continue;
+    }
     Register rA = I->getOperand(0).getReg();
     Register rB = I->getOperand(1).getReg();
-    if (I->getOperand(2).getReg() != MicroBlaze::R0 || rA == rB) { ++I; continue; }
+    if (I->getOperand(2).getReg() != MicroBlaze::R0 || rA == rB) {
+      ++I;
+      continue;
+    }
 
     auto Addk = I++;
-    if (I == E) break;
+    if (I == E)
+      break;
 
     MachineBasicBlock::iterator Addik, Lwi;
     bool PatternA = false;
 
     if (I->getOpcode() == MicroBlaze::ADDIK &&
-        I->getOperand(0).getReg() == rB &&
-        I->getOperand(1).getReg() == rA) {
+        I->getOperand(0).getReg() == rB && I->getOperand(1).getReg() == rA) {
       // Pattern A: addik rB, rA, N follows the addk.
       Addik = I++;
-      if (I == E) break;
+      if (I == E)
+        break;
       if (I->getOpcode() != MicroBlaze::LWI ||
-          I->getOperand(1).getReg() != rA) { continue; }
+          I->getOperand(1).getReg() != rA) {
+        continue;
+      }
       Lwi = I++;
       PatternA = true;
     } else if (I->getOpcode() == MicroBlaze::LWI &&
                I->getOperand(1).getReg() == rA) {
       // Pattern B: lwi rC, rA, OFF follows the addk.
       Lwi = I++;
-      if (I == E) break;
+      if (I == E)
+        break;
       if (I->getOpcode() != MicroBlaze::ADDIK ||
-          I->getOperand(0).getReg() != rB ||
-          I->getOperand(1).getReg() != rA) { continue; }
+          I->getOperand(0).getReg() != rB || I->getOperand(1).getReg() != rA) {
+        continue;
+      }
       Addik = I++;
     } else {
       continue;
@@ -320,11 +360,12 @@ static bool sinkPreIncrements(MachineBasicBlock &MBB) {
     // Safety: lwi destination must not alias rB (would clobber the pointer
     // base before addik reads it in the lwi-before-addik order).
     Register rC = Lwi->getOperand(0).getReg();
-    if (rC == rB) continue;
+    if (rC == rB)
+      continue;
 
     // Rewrite both instructions to use rB directly, eliminating rA.
-    Lwi->getOperand(1).setReg(rB);    // lwi rC, rA, OFF → lwi rC, rB, OFF
-    Addik->getOperand(1).setReg(rB);  // addik rB, rA, N → addik rB, rB, N
+    Lwi->getOperand(1).setReg(rB);   // lwi rC, rA, OFF → lwi rC, rB, OFF
+    Addik->getOperand(1).setReg(rB); // addik rB, rA, N → addik rB, rB, N
 
     if (PatternA) {
       // Reorder: move lwi to before addik.
@@ -340,10 +381,12 @@ static bool sinkPreIncrements(MachineBasicBlock &MBB) {
     // terminator, placing it immediately before the backward branch so that
     // searchBackward can move it into the delay slot.
     while (I != E && !I->isTerminator()) {
-      bool TouchesRB = llvm::any_of(I->operands(), [rB](const MachineOperand &MO) {
-        return MO.isReg() && MO.getReg() == rB;
-      });
-      if (TouchesRB) break;
+      bool TouchesRB =
+          llvm::any_of(I->operands(), [rB](const MachineOperand &MO) {
+            return MO.isReg() && MO.getReg() == rB;
+          });
+      if (TouchesRB)
+        break;
       ++I;
     }
     if (std::next(Addik) != I)

@@ -21,7 +21,8 @@ namespace llvm {
 // The static char ID and MachineFunctionPass machinery lives in the
 // MicroBlazeDAGToDAGISelLegacy wrapper below.
 class MicroBlazeDAGToDAGISel : public SelectionDAGISel {
-  // Set at the start of each function; referenced by generated CheckPatternPredicate.
+  // Set at the start of each function; referenced by generated
+  // CheckPatternPredicate.
   const MicroBlazeSubtarget *Subtarget = nullptr;
 
 public:
@@ -45,7 +46,8 @@ public:
   // Match a constant FSL port number in 0..15 and bind it to the corresponding
   // non-allocatable rfslN register, so a static FSL get/put can encode the port
   // in the instruction word.  Fails for non-constants and out-of-range values,
-  // which then select the dynamic (port-in-GPR) form.  See MicroBlazeInstrFSL.td.
+  // which then select the dynamic (port-in-GPR) form.  See
+  // MicroBlazeInstrFSL.td.
   bool SelectFSLImm(SDValue N, SDValue &Port);
 
   bool tryBSEFI(SDNode *N);

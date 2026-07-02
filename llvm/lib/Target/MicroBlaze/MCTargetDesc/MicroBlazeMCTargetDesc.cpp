@@ -59,9 +59,10 @@ createMicroBlazeMCSubtargetInfo(const Triple &TT, StringRef CPU, StringRef FS) {
   return createMicroBlazeMCSubtargetInfoImpl(TT, CPUName, TuneCPU, FS);
 }
 
-// Generic MCInstrAnalysis (uses the isCall/isReturn/isBranch flags from the .td)
-// — required by analysis tools such as llvm-mca, which dereference it.
-static MCInstrAnalysis *createMicroBlazeMCInstrAnalysis(const MCInstrInfo *Info) {
+// Generic MCInstrAnalysis (uses the isCall/isReturn/isBranch flags from the
+// .td) — required by analysis tools such as llvm-mca, which dereference it.
+static MCInstrAnalysis *
+createMicroBlazeMCInstrAnalysis(const MCInstrInfo *Info) {
   return new MCInstrAnalysis(Info);
 }
 

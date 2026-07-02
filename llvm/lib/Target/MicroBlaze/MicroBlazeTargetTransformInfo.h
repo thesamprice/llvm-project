@@ -16,8 +16,7 @@
 
 namespace llvm {
 
-class MicroBlazeTTIImpl final
-    : public BasicTTIImplBase<MicroBlazeTTIImpl> {
+class MicroBlazeTTIImpl final : public BasicTTIImplBase<MicroBlazeTTIImpl> {
   using BaseT = BasicTTIImplBase<MicroBlazeTTIImpl>;
   friend BaseT;
 
@@ -29,9 +28,8 @@ class MicroBlazeTTIImpl final
 
 public:
   explicit MicroBlazeTTIImpl(const MicroBlazeTargetMachine *TM,
-                              const Function &F)
-      : BaseT(TM, F.getDataLayout()),
-        ST(TM->getSubtargetImpl(F)),
+                             const Function &F)
+      : BaseT(TM, F.getDataLayout()), ST(TM->getSubtargetImpl(F)),
         TLI(ST->getTargetLowering()) {}
 
   // isLegalICmpImmediate: delegate to TLI (default: true for all immediates).
