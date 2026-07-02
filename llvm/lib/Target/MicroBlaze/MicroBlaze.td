@@ -62,7 +62,8 @@ defm : RemapAllTargetPseudoPointerOperands<GPR>;
 // which includes the pattern-compare unit (cmp/cmpu) in all standard builds.
 def : ProcessorModel<"generic", MicroBlazeSchedModel, [FeaturePatternCompare]>;
 def : ProcessorModel<"v11.0", MicroBlazeSchedModel,
-    [FeatureBarrelShift, FeatureMultiplyHigh, FeaturePatternCompare]>;
+    [FeatureBarrelShift, FeatureMultiplyHigh, FeaturePatternCompare,
+     FeatureDivide]>;
 
 def MicroBlazeInstPrinter : AsmWriter {
   string AsmWriterClassName = "InstPrinter";

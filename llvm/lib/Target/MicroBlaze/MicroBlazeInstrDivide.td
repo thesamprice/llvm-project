@@ -17,5 +17,11 @@ let Predicates = [HasDividePred] in {
                   "idiv\t$rD, $rA, $rB", [], IIC_DIV> { let hasSideEffects = 1; }
   def IDIVU : MBA<0x12, 0x002, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
                   "idivu\t$rD, $rA, $rB", [], IIC_DIV> { let hasSideEffects = 1; }
+
+  // UG984 §5: IDIV writes quotient to rD; rA is clobbered with remainder
+  // (modeled via hasSideEffects above).  Only quotient (rD) is captured here;
+  // ISD::SREM/UREM continue through __modsi3/__umodsi3 libcalls.
+  def : Pat<(sdiv i32:$rA, i32:$rB), (IDIV  GPR:$rA, GPR:$rB)>;
+  def : Pat<(udiv i32:$rA, i32:$rB), (IDIVU GPR:$rA, GPR:$rB)>;
 }
 

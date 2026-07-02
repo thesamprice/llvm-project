@@ -21,7 +21,11 @@
 #include "llvm/CodeGen/RuntimeLibcallUtil.h"
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/CodeGen/SelectionDAGNodes.h"
+#include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/GlobalValue.h"
+#include "llvm/IR/InlineAsm.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LLVMContext.h"
 
 using namespace llvm;
 
@@ -49,11 +53,24 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   setStackPointerRegisterToSaveRestore(MicroBlaze::R1);
   setBooleanContents(ZeroOrOneBooleanContent);
 
-  // Expand operations that MicroBlaze does not support natively.
-  setOperationAction(ISD::SDIV,  MVT::i32, Expand);
-  setOperationAction(ISD::UDIV,  MVT::i32, Expand);
-  setOperationAction(ISD::SREM,  MVT::i32, Expand);
-  setOperationAction(ISD::UREM,  MVT::i32, Expand);
+  // Atomic operations: LWX/SWX provide 32-bit hardware LL/SC.
+  // AtomicExpandPass generates the retry loop using emitLoadLinked /
+  // emitStoreConditional (defined below); setMinCmpXchgSizeInBits(32) promotes
+  // sub-word cmpxchg to i32 width with masking.  ATOMIC_FENCE is Custom
+  // (→ MBAR) and is unaffected by these settings.
+  setMaxAtomicSizeInBitsSupported(32);
+  setMinCmpXchgSizeInBits(32);
+
+  // Integer divide: use hardware IDIV/IDIVU when +divide is active; otherwise
+  // fall through to __divsi3/__udivsi3 libcalls.  SREM/UREM always use
+  // libcalls because the remainder is a destructive rA side-effect of IDIV
+  // that is not currently modeled as a separate DAG output.
+  if (!STI.hasDivide()) {
+    setOperationAction(ISD::SDIV, MVT::i32, Expand);
+    setOperationAction(ISD::UDIV, MVT::i32, Expand);
+  }
+  setOperationAction(ISD::SREM,    MVT::i32, Expand);
+  setOperationAction(ISD::UREM,    MVT::i32, Expand);
   setOperationAction(ISD::SDIVREM, MVT::i32, Expand);
   setOperationAction(ISD::UDIVREM, MVT::i32, Expand);
 
@@ -370,15 +387,21 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   // SELECT→SELECT_CC→SETCC→SELECT_CC expansion cycle.
   setOperationAction(ISD::SELECT,    MVT::i32, Expand);
   setOperationAction(ISD::SELECT_CC, MVT::i32, Custom);
-  setOperationAction(ISD::SETCC,     MVT::i32, Expand);
+  // With +pattern-compare, PCMPEQ/PCMPNE handle EQ/NE as integer 0/1.
+  // Other conditions fall back to SELECT_CC(LHS, RHS, 1, 0, CC).
+  setOperationAction(ISD::SETCC, MVT::i32,
+                     STI.hasPatternCompare() ? Custom : Expand);
 
-  // MicroBlaze does not have CTLZ, CTTZ, or CTPOP instructions.
-  setOperationAction(ISD::CTLZ,  MVT::i32, Expand);
+  // CLZ is available under +pattern-compare (UG984 §5 Fig 83, v8.10.a+).
+  // CTTZ and CTPOP have no hardware instruction.
+  if (!STI.hasPatternCompare())
+    setOperationAction(ISD::CTLZ, MVT::i32, Expand);
   setOperationAction(ISD::CTTZ,  MVT::i32, Expand);
   setOperationAction(ISD::CTPOP, MVT::i32, Expand);
 
-  // No byte-swap, bit-reverse, or rotate instructions.
-  setOperationAction(ISD::BSWAP,     MVT::i32, Expand);
+  // With +reorder: SWAPB+SWAPH = 2-instruction bswap32. Without: expand to shifts.
+  setOperationAction(ISD::BSWAP, MVT::i32,
+                     STI.hasReorderInstr() ? Legal : Expand);
   setOperationAction(ISD::ROTL,      MVT::i32, Expand);
   setOperationAction(ISD::ROTR,      MVT::i32, Expand);
   setOperationAction(ISD::BITREVERSE, MVT::i32, Expand);
@@ -398,7 +421,19 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   // No jump-table support: fall back to decision trees for all switch stmts.
   setMinimumJumpTableEntries(INT_MAX);
 
+  // Memory barriers: ISD::ATOMIC_FENCE → MBAR 1 (data-side barrier, UG984 §2).
+  // MBAR 0 would also clear the BTC; MBAR 1 avoids that cost.
+  setOperationAction(ISD::ATOMIC_FENCE, MVT::Other, Custom);
+
   setMinFunctionAlignment(Align(4));
+}
+
+bool MicroBlazeTargetLowering::isIntDivCheap(EVT VT,
+                                              AttributeList Attr) const {
+  // With +divide, IDIV/IDIVU are 34-cycle blocking instructions — cheaper
+  // than a __divsi3 libcall.  Without +divide, division is a libcall and
+  // strength-reduction to multiply-high sequences is preferable.
+  return Subtarget.hasDivide();
 }
 
 const char *MicroBlazeTargetLowering::getTargetNodeName(unsigned Opcode) const {
@@ -416,6 +451,8 @@ const char *MicroBlazeTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case MicroBlazeISD::SELECT_CC_CMPU:return "MicroBlazeISD::SELECT_CC_CMPU";
   case MicroBlazeISD::BR_CC_FP:      return "MicroBlazeISD::BR_CC_FP";
   case MicroBlazeISD::SELECT_CC_FP:  return "MicroBlazeISD::SELECT_CC_FP";
+  case MicroBlazeISD::PCMPEQ:        return "MicroBlazeISD::PCMPEQ";
+  case MicroBlazeISD::PCMPNE:        return "MicroBlazeISD::PCMPNE";
   }
   return nullptr;
 }
@@ -432,11 +469,13 @@ SDValue MicroBlazeTargetLowering::LowerOperation(SDValue Op,
   case ISD::ConstantPool:   return LowerConstantPool(Op, DAG);
   case ISD::BR_CC:          return LowerBR_CC(Op, DAG);
   case ISD::SELECT_CC:      return LowerSELECT_CC(Op, DAG);
+  case ISD::SETCC:          return LowerSETCC(Op, DAG);
   case ISD::SHL:
   case ISD::SRL:
   case ISD::SRA:            return LowerShift(Op, DAG);
   case ISD::VASTART:        return LowerVASTART(Op, DAG);
   case ISD::VAARG:          return LowerVAARG(Op, DAG);
+  case ISD::ATOMIC_FENCE:   return LowerATOMIC_FENCE(Op, DAG);
   case ISD::LOAD:           return LowerFP32Load(Op, DAG);
   case ISD::STORE:          return LowerFP32Store(Op, DAG);
   default:
@@ -464,6 +503,27 @@ SDValue MicroBlazeTargetLowering::LowerFP32Store(SDValue Op,
   SDValue I32Val = DAG.getNode(ISD::BITCAST, DL, MVT::i32, ST->getValue());
   return DAG.getStore(ST->getChain(), DL, I32Val, ST->getBasePtr(),
                       ST->getMemOperand());
+}
+
+SDValue MicroBlazeTargetLowering::LowerSETCC(SDValue Op,
+                                               SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  SDValue LHS = Op.getOperand(0);
+  SDValue RHS = Op.getOperand(1);
+  ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(2))->get();
+
+  // PCMPEQ/PCMPNE produce an integer 0/1 result directly (UG984 §5 Figs 116-118).
+  if (CC == ISD::SETEQ)
+    return DAG.getNode(MicroBlazeISD::PCMPEQ, DL, MVT::i32, LHS, RHS);
+  if (CC == ISD::SETNE)
+    return DAG.getNode(MicroBlazeISD::PCMPNE, DL, MVT::i32, LHS, RHS);
+
+  // Other conditions: lower as SELECT_CC(LHS, RHS, 1, 0, CC) which routes
+  // through LowerSELECT_CC → CMP/CMPU pseudo.
+  SDValue One  = DAG.getConstant(1, DL, MVT::i32);
+  SDValue Zero = DAG.getConstant(0, DL, MVT::i32);
+  return DAG.getNode(ISD::SELECT_CC, DL, MVT::i32, LHS, RHS, One, Zero,
+                     DAG.getCondCode(CC));
 }
 
 SDValue MicroBlazeTargetLowering::LowerSELECT_CC(SDValue Op,
@@ -737,6 +797,103 @@ MachineBasicBlock *MicroBlazeTargetLowering::EmitInstrWithCustomInserter(
                              MI.getOperand(0).getReg(),
                              MI.getOperand(1).getReg(),
                              MI.getOperand(2).getReg());
+}
+
+SDValue MicroBlazeTargetLowering::LowerATOMIC_FENCE(SDValue Op,
+                                                      SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  SDValue Chain = Op.getOperand(0);
+  auto SSId = static_cast<SyncScope::ID>(Op.getConstantOperandVal(2));
+
+  // A single-thread fence only constrains the compiler, not the hardware.
+  if (SSId == SyncScope::SingleThread)
+    return Chain;
+
+  // mbar 1 = data-side barrier: drains all pending data-memory operations
+  // before subsequent memory accesses can proceed (UG984 §2).  We use mbar 1
+  // rather than mbar 0 to preserve the Branch Target Cache (mbar 0 clears it).
+  SDValue Imm = DAG.getTargetConstant(1, DL, MVT::i32);
+  return SDValue(DAG.getMachineNode(MicroBlaze::MBAR, DL, MVT::Other,
+                                    {Imm, Chain}), 0);
+}
+
+//===----------------------------------------------------------------------===//
+// Atomic LL/SC expansion (LWX / SWX)
+//
+// MicroBlaze provides hardware load-linked / store-conditional via LWX and SWX
+// (AMD UG984 §5, opcodes 0x32 / 0x36).  LWX sets a reservation on the target
+// address; SWX stores conditionally and clears the reservation, reporting the
+// outcome through MSR[C] (bit 29 in MSB-first numbering, bit 2 as an integer):
+//   MSR[C] = 0  on success
+//   MSR[C] = 1  on failure (reservation stolen by interrupt or another core)
+//
+// This implementation follows the behaviour described in UG984 §5.
+//===----------------------------------------------------------------------===//
+
+// AtomicExpandPass calls these two hooks to build the LL/SC retry loop at IR
+// level.  The loop structure is:
+//
+//   loop:
+//     old = emitLoadLinked(addr)     ; LWX rD, rA, r0
+//     <compute new value from old>
+//     success = emitStoreConditional(new, addr)   ; SWX + MFS + ANDI
+//     if (success != 0) goto loop    ; retry on reservation failure
+
+TargetLowering::AtomicExpansionKind
+MicroBlazeTargetLowering::shouldExpandAtomicCmpXchgInIR(
+    const AtomicCmpXchgInst *AI) const {
+  // LWX/SWX operate on 32-bit words; setMinCmpXchgSizeInBits(32) above
+  // promotes narrower cmpxchg operations before this point.
+  return AtomicExpansionKind::LLSC;
+}
+
+TargetLowering::AtomicExpansionKind
+MicroBlazeTargetLowering::shouldExpandAtomicRMWInIR(const AtomicRMWInst *AI) const {
+  // Expand all 32-bit atomicrmw operations to LWX/SWX LL/SC loops.
+  // Sub-word (i8/i16) operations are promoted to i32 width with masking by
+  // AtomicExpandPass using setMaxAtomicSizeInBitsSupported(32) above.
+  return AtomicExpansionKind::LLSC;
+}
+
+Value *MicroBlazeTargetLowering::emitLoadLinked(IRBuilderBase &Builder,
+                                                 Type *ValueTy, Value *Addr,
+                                                 AtomicOrdering Ord) const {
+  // LWX rD, rA, rB — load word exclusive; rB=r0 so effective address = rA+0.
+  // Sets the hardware reservation bit on the memory address.
+  // UG984 §5 (opcode 0x32, func=0x400).
+  auto *I32Ty = Type::getInt32Ty(Builder.getContext());
+  FunctionType *FTy = FunctionType::get(I32Ty, {Addr->getType()}, false);
+  InlineAsm *IA = InlineAsm::get(FTy, "lwx $0, $1, r0", "=&r,r",
+                                  /*hasSideEffects=*/true);
+  return Builder.CreateCall(IA, {Addr});
+}
+
+Value *MicroBlazeTargetLowering::emitStoreConditional(IRBuilderBase &Builder,
+                                                       Value *Val, Value *Addr,
+                                                       AtomicOrdering Ord) const {
+  // SWX rD, rA, rB — store word exclusive; rB=r0 so effective address = rA+0.
+  // Clears reservation on success.  UG984 §5 (opcode 0x36, func=0x400):
+  //   MSR[C] = 0  on success (reservation was still set)
+  //   MSR[C] = 1  on failure (reservation was cleared externally)
+  //
+  // MFS rD, rMSR then reads the MSR.  ANDI isolates the carry bit at
+  // MSR bit 29 (MSB-first numbering) = bit 2 in the 32-bit integer.
+  //
+  // AtomicExpandPass treats the return value as: 0 = success, non-zero = retry.
+  // MSR[C]=0 (success) → andi result = 0 ✓
+  // MSR[C]=1 (failure) → andi result = 4, non-zero → retry ✓
+  //
+  // All three instructions are in one asm block so the MSR read is
+  // guaranteed to immediately follow the SWX with no intervening code.
+  auto *I32Ty = Type::getInt32Ty(Builder.getContext());
+  FunctionType *FTy = FunctionType::get(I32Ty, {I32Ty, Addr->getType()}, false);
+  InlineAsm *IA = InlineAsm::get(FTy,
+      "swx $1, $2, r0\n\t"  // store exclusive
+      "mfs $0, rmsr\n\t"     // read MSR into result register
+      "andi $0, $0, 4",      // isolate carry bit (bit 2 = MSR[C])
+      "=&r,r,r",
+      /*hasSideEffects=*/true);
+  return Builder.CreateCall(IA, {Val, Addr});
 }
 
 SDValue MicroBlazeTargetLowering::LowerShift(SDValue Op,

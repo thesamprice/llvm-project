@@ -11,6 +11,7 @@
 #include "MicroBlazeISelDAGToDAG.h"
 #include "MicroBlazeTargetTransformInfo.h"
 #include "TargetInfo/MicroBlazeTargetInfo.h"
+#include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Compiler.h"
@@ -69,6 +70,12 @@ public:
 
   MicroBlazeTargetMachine &getMicroBlazeTargetMachine() const {
     return getTM<MicroBlazeTargetMachine>();
+  }
+
+  bool addPreISel() override {
+    // Expand cmpxchg/atomicrmw to LWX/SWX LL/SC loops before SelectionDAG.
+    addPass(createAtomicExpandLegacyPass());
+    return false;
   }
 
   bool addInstSelector() override {

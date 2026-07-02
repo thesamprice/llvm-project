@@ -62,6 +62,12 @@ enum NodeType : unsigned {
   // TrueV/FalseV may be any type (i32 or f32); the comparison is always f32.
   //   (TrueV, FalseV, CC_as_ISD_CondCode_const, LHS_f32, RHS_f32)
   SELECT_CC_FP,
+  // Pattern-compare equality/inequality as integer 0/1 (ISD::SETCC value form).
+  // PCMPEQ(rA, rB) = 1 if rA == rB, else 0.
+  // PCMPNE(rA, rB) = 1 if rA != rB, else 0.
+  // Selected by MicroBlazeInstrPCmp.td patterns to PCMPEQ/PCMPNE machine insns.
+  PCMPEQ,
+  PCMPNE,
 };
 } // namespace MicroBlazeISD
 
@@ -77,16 +83,22 @@ public:
 
   const char *getTargetNodeName(unsigned Opcode) const override;
 
-  // Division is always handled by libcalls (__divsi3, __modsi3, etc.).
-  // Returning true prevents DAGCombiner from strength-reducing constant
-  // divisions to multiply-high or multiply-lo sequences.
-  bool isIntDivCheap(EVT VT, AttributeList Attr) const override {
-    return true;
-  }
+  bool isIntDivCheap(EVT VT, AttributeList Attr) const override;
 
   std::pair<unsigned, const TargetRegisterClass *>
   getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
                                StringRef Constraint, MVT VT) const override;
+
+  // Atomic LL/SC expansion via LWX/SWX hardware instructions.
+  // AtomicExpandPass calls these at IR level to build the LL/SC retry loop.
+  AtomicExpansionKind
+  shouldExpandAtomicCmpXchgInIR(const AtomicCmpXchgInst *AI) const override;
+  AtomicExpansionKind
+  shouldExpandAtomicRMWInIR(const AtomicRMWInst *AI) const override;
+  Value *emitLoadLinked(IRBuilderBase &Builder, Type *ValueTy, Value *Addr,
+                        AtomicOrdering Ord) const override;
+  Value *emitStoreConditional(IRBuilderBase &Builder, Value *Val, Value *Addr,
+                              AtomicOrdering Ord) const override;
 
 private:
   SDValue LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
@@ -108,6 +120,8 @@ private:
   SDValue LowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerSETCC(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerATOMIC_FENCE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerShift(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) const;
