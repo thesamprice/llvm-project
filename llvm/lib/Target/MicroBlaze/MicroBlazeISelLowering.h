@@ -80,6 +80,10 @@ enum NodeType : unsigned {
   ADDE,
   SUBC,
   SUBE,
+  // Integer absolute value via a branch diamond (expanded by EmitInstrWithCustomInserter).
+  // The negation is placed on the fall-through (≤0) path only; src > 0 skips it.
+  // Avoids the default SRA+XOR+SUB 3-instruction arithmetic sequence.
+  ABS,
 };
 } // namespace MicroBlazeISD
 
@@ -147,6 +151,7 @@ private:
   SDValue LowerFP32Load(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFP32Store(SDValue Op, SelectionDAG &DAG) const;
 
+  SDValue LowerABS(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerUADDO(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerUSUBO(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerUADDO_CARRY(SDValue Op, SelectionDAG &DAG) const;

@@ -162,6 +162,24 @@ def SDT_MBSelectCCCmpu : SDTypeProfile<1, 5, [
     SDTCisVT<3, i32>, SDTCisVT<4, i32>, SDTCisVT<5, i32>]>;
 def MBSelectCCCmpu : SDNode<"MicroBlazeISD::SELECT_CC_CMPU", SDT_MBSelectCCCmpu, []>;
 
+// ABS_PSEUDO: integer absolute value expanded by EmitInstrWithCustomInserter.
+// Operands: dst, src.
+// Diamond: if src > 0, skip negation; fall-through path negates.
+//   headMBB:  BGTID src, sinkMBB   (delayed branch; delay slot filled by DSF)
+//   negMBB:   RSUBK dst_neg, src, R0   (0 - src = -src; runs only when src ≤ 0)
+//   sinkMBB:  dst = phi [dst_neg, negMBB], [src, headMBB]
+// DSF's searchJoinBB moves the first safe instruction from sinkMBB into the
+// BGTID delay slot, hiding the lw→bgtid load-use stall.
+def SDT_MBAbs : SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>, SDTCisVT<0, i32>]>;
+def MBAbs : SDNode<"MicroBlazeISD::ABS", SDT_MBAbs, []>;
+
+let usesCustomInserter = 1 in
+def ABS_PSEUDO : MBPseudo<
+    (outs GPR:$dst),
+    (ins GPR:$src),
+    "#ABS_PSEUDO $dst, $src",
+    [(set i32:$dst, (MBAbs i32:$src))]>;
+
 let usesCustomInserter = 1, Predicates = [HasPatternComparePred] in
 def SELECT_CC_CMPU_PSEUDO : MBPseudo<
     (outs GPR:$dst),

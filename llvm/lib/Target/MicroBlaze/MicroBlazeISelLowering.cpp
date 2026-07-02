@@ -418,10 +418,21 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
 
   // CLZ is available under +pattern-compare (UG984 §5 Fig 83, v8.10.a+).
   // CTTZ and CTPOP have no hardware instruction.
-  if (!STI.hasPatternCompare())
-    setOperationAction(ISD::CTLZ, MVT::i32, Expand);
+  // Guard CTLZ_ZERO_POISON too: llvm.ctlz(x, i1 true) generates that node,
+  // which defaults to Legal and leaks the clz instruction without the feature.
+  if (!STI.hasPatternCompare()) {
+    setOperationAction(ISD::CTLZ,             MVT::i32, Expand);
+    setOperationAction(ISD::CTLZ_ZERO_POISON, MVT::i32, Expand);
+  }
   setOperationAction(ISD::CTTZ,  MVT::i32, Expand);
   setOperationAction(ISD::CTPOP, MVT::i32, Expand);
+
+  // abs(x): no native instruction and no conditional-move, so the default
+  // SRA+XOR+SUB expansion always runs unconditionally (3 instructions).
+  // Custom-lower to a branch diamond (BGTID + conditional RSUBK) instead;
+  // the negation executes only on the ≤0 path, saving ~1.5 insns/iteration
+  // on typical abs workloads and matching GCC's strategy for this target.
+  setOperationAction(ISD::ABS, MVT::i32, Custom);
 
   // bswap32 lowering: SWAPB is a full 32-bit byte reversal (ABCD→DCBA), so it
   // implements bswap32 in a single instruction.  Legal with tablegen pattern
@@ -488,6 +499,7 @@ const char *MicroBlazeTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case MicroBlazeISD::ADDE:         return "MicroBlazeISD::ADDE";
   case MicroBlazeISD::SUBC:         return "MicroBlazeISD::SUBC";
   case MicroBlazeISD::SUBE:         return "MicroBlazeISD::SUBE";
+  case MicroBlazeISD::ABS:          return "MicroBlazeISD::ABS";
   }
   return nullptr;
 }
@@ -513,6 +525,7 @@ SDValue MicroBlazeTargetLowering::LowerOperation(SDValue Op,
   case ISD::ATOMIC_FENCE:   return LowerATOMIC_FENCE(Op, DAG);
   case ISD::LOAD:           return LowerFP32Load(Op, DAG);
   case ISD::STORE:          return LowerFP32Store(Op, DAG);
+  case ISD::ABS:            return LowerABS(Op, DAG);
   case ISD::UADDO:          return LowerUADDO(Op, DAG);
   case ISD::USUBO:          return LowerUSUBO(Op, DAG);
   case ISD::UADDO_CARRY:    return LowerUADDO_CARRY(Op, DAG);
@@ -563,6 +576,15 @@ SDValue MicroBlazeTargetLowering::LowerSETCC(SDValue Op,
   SDValue Zero = DAG.getConstant(0, DL, MVT::i32);
   return DAG.getNode(ISD::SELECT_CC, DL, MVT::i32, LHS, RHS, One, Zero,
                      DAG.getCondCode(CC));
+}
+
+SDValue MicroBlazeTargetLowering::LowerABS(SDValue Op, SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  SDValue X = Op.getOperand(0);
+  // Emit MicroBlazeISD::ABS, matched by ABS_PSEUDO and expanded by
+  // EmitInstrWithCustomInserter to a BGTID diamond: the RSUBK negation
+  // only executes on the fall-through (x ≤ 0) path.
+  return DAG.getNode(MicroBlazeISD::ABS, DL, MVT::i32, X);
 }
 
 SDValue MicroBlazeTargetLowering::LowerSELECT_CC(SDValue Op,
@@ -760,6 +782,58 @@ emitSelectCCDiamond(MachineInstr &MI, MachineBasicBlock *BB,
 // SELECT_CC_CMPU_PSEUDO operands: dst(0) TrueV(1) FalseV(2) CC_imm(3) LHS(4) RHS(5)
 MachineBasicBlock *MicroBlazeTargetLowering::EmitInstrWithCustomInserter(
     MachineInstr &MI, MachineBasicBlock *BB) const {
+  // ABS_PSEUDO: abs(src) via a branch diamond.
+  //
+  //   headMBB:  BGTID src, sinkMBB   (delayed branch; delay slot filled by DSF)
+  //   negMBB:   RSUBK dst_neg, src, R0   (0 - src = -src; runs only when src ≤ 0)
+  //   sinkMBB:  dst = phi [dst_neg, negMBB], [src, headMBB]
+  //
+  // DSF's searchJoinBB moves the first safe instruction from sinkMBB into the
+  // BGTID delay slot, hiding the lw→bgtid load-use stall and removing the
+  // 2-cycle branch penalty on the taken path.
+  if (MI.getOpcode() == MicroBlaze::ABS_PSEUDO) {
+    DebugLoc DL = MI.getDebugLoc();
+    MachineFunction *MF = BB->getParent();
+    const TargetInstrInfo &TII = *MF->getSubtarget().getInstrInfo();
+    const BasicBlock *LLVM_BB = BB->getBasicBlock();
+    MachineFunction::iterator It = ++BB->getIterator();
+
+    Register DstReg = MI.getOperand(0).getReg();
+    Register SrcReg = MI.getOperand(1).getReg();
+
+    MachineBasicBlock *headMBB = BB;
+    MachineBasicBlock *negMBB  = MF->CreateMachineBasicBlock(LLVM_BB);
+    MachineBasicBlock *sinkMBB = MF->CreateMachineBasicBlock(LLVM_BB);
+    MF->insert(It, negMBB);
+    MF->insert(It, sinkMBB);
+
+    sinkMBB->splice(sinkMBB->begin(), headMBB,
+                    std::next(MI.getIterator()), headMBB->end());
+    sinkMBB->transferSuccessorsAndUpdatePHIs(headMBB);
+
+    Register NegReg =
+        MF->getRegInfo().createVirtualRegister(&MicroBlaze::GPRRegClass);
+    BuildMI(*sinkMBB, sinkMBB->begin(), DL, TII.get(TargetOpcode::PHI), DstReg)
+        .addReg(NegReg).addMBB(negMBB)
+        .addReg(SrcReg).addMBB(headMBB);
+
+    // Emit delayed branch so DSF can pull an instruction from sinkMBB
+    // (the join block) into the slot via searchJoinBB.
+    BuildMI(headMBB, DL, TII.get(MicroBlaze::BGTID))
+        .addReg(SrcReg).addMBB(sinkMBB);
+    headMBB->addSuccessor(negMBB);
+    headMBB->addSuccessor(sinkMBB);
+
+    // negMBB: negate src — executes only when src ≤ 0.
+    // RSUBK rD, rA, rB = rD = rB - rA; with rB = R0 (hardwired 0): rD = -rA.
+    BuildMI(*negMBB, negMBB->end(), DL, TII.get(MicroBlaze::RSUBK), NegReg)
+        .addReg(SrcReg).addReg(MicroBlaze::R0);
+    negMBB->addSuccessor(sinkMBB);
+
+    MI.eraseFromParent();
+    return sinkMBB;
+  }
+
   if (MI.getOpcode() == MicroBlaze::SELECT_CC_PSEUDO) {
     ISD::CondCode CC = static_cast<ISD::CondCode>(MI.getOperand(3).getImm());
     Register DiffReg = MI.getOperand(4).getReg();
