@@ -1,11 +1,13 @@
 ; RUN: llc -mtriple=microblazeel < %s | FileCheck %s
 
-; max(a, b): uses cmp + bgeid (branch-if->=0 in delay slot).
-; cmp rD,rA,rB sets bit31=1 when rA>rB; bgeid branches when rD>=0 (i.e. a<=b).
+; max(a, b): uses cmp + bgei.
+; cmp rD,rA,rB sets bit31=1 when rA>rB; bgei branches when rD>=0 (i.e. a<=b).
+; The delay slot filler cannot hoist 'cmp' into bgeid's delay slot because cmp
+; defines r3 which bgeid also reads (conservative backedge guard), so bgeid is
+; converted to the no-delay-slot form bgei.
 ; CHECK-LABEL: max:
 ; CHECK: cmp r3, r5, r6
-; CHECK: bgeid r3
-; CHECK: bri
+; CHECK: bgei r3
 ; CHECK: rtsd r15, 8
 ; CHECK: rtsd r15, 8
 define i32 @max(i32 %a, i32 %b) {
@@ -17,11 +19,10 @@ else:
   ret i32 %b
 }
 
-; min(a, b): uses cmp + bleid (branch-if-<=0).
+; min(a, b): uses cmp + blei.
 ; CHECK-LABEL: min:
 ; CHECK: cmp r3, r5, r6
-; CHECK: bleid r3
-; CHECK: bri
+; CHECK: blei r3
 ; CHECK: rtsd r15, 8
 ; CHECK: rtsd r15, 8
 define i32 @min(i32 %a, i32 %b) {

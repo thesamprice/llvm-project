@@ -9,9 +9,17 @@
 #ifndef LLVM_LIB_TARGET_MICROBLAZE_MICROBLAZEISELLOWERING_H
 #define LLVM_LIB_TARGET_MICROBLAZE_MICROBLAZEISELLOWERING_H
 
+#include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/TargetLowering.h"
 
 namespace llvm {
+
+// Map an f32 ISD::CondCode to FCMP machine opcodes for BR_CC_FP / SELECT_CC_FP.
+// Opc1 is always set; Opc2 is nonzero for unordered conditions (OR two results).
+// Invert=true means branch/select fires when the FCMP result IS zero (SETO only).
+// Returns false if CC is not a valid f32 condition.
+bool getFCmpOpcodes(ISD::CondCode CC,
+                    unsigned &Opc1, unsigned &Opc2, bool &Invert);
 
 namespace MicroBlazeISD {
 enum NodeType : unsigned {
@@ -45,6 +53,15 @@ enum NodeType : unsigned {
   // Unsigned conditional select using CMPU; expanded by EmitInstrWithCustomInserter.
   //   (TrueV, FalseV, CC_as_ISD_CondCode_const, LHS, RHS)
   SELECT_CC_CMPU,
+  // Float conditional branch using a hardware FCMP instruction (UG984 §5).
+  // FCMP_XX rResult, rA, rB writes 1.0 (0x3F800000) if the condition holds,
+  // else 0.0; the branch then fires on rResult != 0.
+  //   (chain, cond_as_ISD_CondCode_const, LHS_f32, RHS_f32, dest_bb)
+  BR_CC_FP,
+  // Float conditional select using FCMP; expanded by EmitInstrWithCustomInserter.
+  // TrueV/FalseV may be any type (i32 or f32); the comparison is always f32.
+  //   (TrueV, FalseV, CC_as_ISD_CondCode_const, LHS_f32, RHS_f32)
+  SELECT_CC_FP,
 };
 } // namespace MicroBlazeISD
 
@@ -94,6 +111,8 @@ private:
   SDValue LowerShift(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerFP32Load(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerFP32Store(SDValue Op, SelectionDAG &DAG) const;
 
   MachineBasicBlock *
   EmitInstrWithCustomInserter(MachineInstr &MI,

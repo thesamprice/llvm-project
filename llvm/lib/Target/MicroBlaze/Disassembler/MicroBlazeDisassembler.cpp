@@ -55,6 +55,16 @@ static DecodeStatus DecodeGPRRegisterClass(MCInst &Inst, unsigned RegNo,
   return MCDisassembler::Success;
 }
 
+// FPR and GPR share the same physical registers; decoding is identical.
+static DecodeStatus DecodeFPRRegisterClass(MCInst &Inst, unsigned RegNo,
+                                           uint64_t /*Address*/,
+                                           const MCDisassembler * /*Decoder*/) {
+  if (RegNo > 31)
+    return MCDisassembler::Fail;
+  Inst.addOperand(MCOperand::createReg(GPRDecoderTable[RegNo]));
+  return MCDisassembler::Success;
+}
+
 // Decode a memri complex operand: {base[20:16], offset[15:0]} from Type B.
 // Adds base register then signed 16-bit offset.
 static DecodeStatus decodeMemRIOperand(MCInst &Inst, unsigned Val,

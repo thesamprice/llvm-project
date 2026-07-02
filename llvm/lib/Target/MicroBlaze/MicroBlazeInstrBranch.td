@@ -120,6 +120,7 @@ def : Pat<(MBCall (i32 texternalsym:$callee)),
 // Global address materialisation via Wrapper → ADDIK rD, r0, symbol.
 def : Pat<(MBWrapper tglobaladdr:$in),  (ADDIK R0, tglobaladdr:$in)>;
 def : Pat<(MBWrapper texternalsym:$in), (ADDIK R0, texternalsym:$in)>;
+def : Pat<(MBWrapper tconstpool:$in),   (ADDIK R0, tconstpool:$in)>;
 
 //===----------------------------------------------------------------------===//
 // Conditional select pseudo (SELECT_CC_PSEUDO)

@@ -13,13 +13,14 @@ define i32 @leaf(i32 %a, i32 %b) {
 }
 
 ; Non-leaf: must save/restore r15.
+; The delay slot filler hoists 'addik r1, r1, 4' into rtsd's delay slot.
 ; CHECK-LABEL: caller:
 ; CHECK: addik r1, r1, -4
 ; CHECK: swi r15, r1, 0
 ; CHECK: bralid r15, ext
 ; CHECK: lwi r15, r1, 0
-; CHECK: addik r1, r1, 4
 ; CHECK: rtsd r15, 8
+; CHECK: addik r1, r1, 4
 define i32 @caller(i32 %a, i32 %b) {
   %r = call i32 @ext(i32 %a, i32 %b)
   ret i32 %r

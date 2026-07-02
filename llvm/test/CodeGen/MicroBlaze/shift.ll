@@ -37,8 +37,9 @@ define i32 @srl_imm(i32 %a) {
   ret i32 %r
 }
 
+; ashr by 1 uses the dedicated single-bit 'sra' instruction rather than bsrai.
 ; CHECK-LABEL: sra_imm:
-; CHECK: bsrai r3, r5, 1
+; CHECK: sra r3, r5
 ; CHECK: rtsd r15, 8
 define i32 @sra_imm(i32 %a) {
   %r = ashr i32 %a, 1

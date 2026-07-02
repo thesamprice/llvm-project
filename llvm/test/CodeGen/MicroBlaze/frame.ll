@@ -3,11 +3,12 @@
 declare void @use(ptr)
 
 ; Leaf with alloca: SP adjusted, no r15 save needed.
+; Delay slot filler hoists 'addik r1, r1, 4' into rtsd's delay slot.
 ; CHECK-LABEL: with_alloca:
 ; CHECK: addik r1, r1, -4
 ; CHECK-NOT: swi r15
-; CHECK: addik r1, r1, 4
 ; CHECK: rtsd r15, 8
+; CHECK: addik r1, r1, 4
 define i32 @with_alloca(i32 %x) {
   %buf = alloca i32
   store i32 %x, ptr %buf
@@ -16,6 +17,7 @@ define i32 @with_alloca(i32 %x) {
 }
 
 ; Non-leaf with alloca: SP adjusted, r15 saved, alloca addr passed to callee.
+; Delay slot filler hoists 'addik r1, r1, 8' into rtsd's delay slot.
 ; CHECK-LABEL: with_call_and_local:
 ; CHECK: addik r1, r1, -8
 ; CHECK: swi r15, r1, 0
@@ -23,8 +25,8 @@ define i32 @with_alloca(i32 %x) {
 ; CHECK: addik r5, r1, 4
 ; CHECK: bralid r15, use
 ; CHECK: lwi r15, r1, 0
-; CHECK: addik r1, r1, 8
 ; CHECK: rtsd r15, 8
+; CHECK: addik r1, r1, 8
 define void @with_call_and_local(i32 %x) {
   %buf = alloca i32
   store i32 %x, ptr %buf

@@ -215,5 +215,66 @@ void MicroBlazeDAGToDAGISel::Select(SDNode *Node) {
     return;
   }
 
+  // Handle MicroBlazeISD::BR_CC_FP: (chain, cc_const, LHS_f32, RHS_f32, dest_bb)
+  // FCMP writes 0x3F800000 (1.0) if condition holds, else 0x00000000 (0.0).
+  // Treating that value as an integer: 0x3F800000 != 0, so BNEID fires on true.
+  // BEQID fires on false — used for the SETO (ordered) condition (inverted).
+  // For unordered conditions we OR two FCMP results before branching (UG984 §5).
+  if (Node->getOpcode() == MicroBlazeISD::BR_CC_FP) {
+    SDLoc DL(Node);
+    ISD::CondCode CC = static_cast<ISD::CondCode>(
+        cast<ConstantSDNode>(Node->getOperand(1))->getZExtValue());
+    SDValue LHS   = Node->getOperand(2);
+    SDValue RHS   = Node->getOperand(3);
+    SDValue Dest  = Node->getOperand(4);
+    SDValue Chain = Node->getOperand(0);
+
+    unsigned Opc1, Opc2;
+    bool Invert;
+    if (!getFCmpOpcodes(CC, Opc1, Opc2, Invert))
+      llvm_unreachable("Unhandled f32 condition code in BR_CC_FP");
+
+    SDNode *Cmp1Node = CurDAG->getMachineNode(Opc1, DL, MVT::i32, {LHS, RHS});
+    SDValue FlagVal(Cmp1Node, 0);
+
+    if (Opc2) {
+      // Unordered variant: OR the two FCMP results; fire on nonzero.
+      SDNode *Cmp2Node = CurDAG->getMachineNode(Opc2, DL, MVT::i32, {LHS, RHS});
+      SDValue Flag2(Cmp2Node, 0);
+      SDNode *OrNode = CurDAG->getMachineNode(MicroBlaze::OR_, DL, MVT::i32,
+                                              {FlagVal, Flag2});
+      FlagVal = SDValue(OrNode, 0);
+    }
+
+    unsigned BrOpc = Invert ? MicroBlaze::BEQID : MicroBlaze::BNEID;
+    SDNode *Selected = CurDAG->getMachineNode(BrOpc, DL, MVT::Other,
+                                              {FlagVal, Dest, Chain});
+    ReplaceNode(Node, Selected);
+    return;
+  }
+
+  // Handle MicroBlazeISD::SELECT_CC_FP: (TrueV, FalseV, CC_const, LHS_f32, RHS_f32)
+  // Choose the pseudo based on the result type: i32→SELECT_CC_FP_PSEUDO,
+  // f32→SELECT_CC_FP_F32_PSEUDO.  EmitInstrWithCustomInserter expands both
+  // to an FCMP (plus optional OR for unordered conditions) + diamond CFG.
+  if (Node->getOpcode() == MicroBlazeISD::SELECT_CC_FP) {
+    SDLoc DL(Node);
+    SDValue TrueV  = Node->getOperand(0);
+    SDValue FalseV = Node->getOperand(1);
+    SDValue CCConst = Node->getOperand(2);
+    SDValue LHS    = Node->getOperand(3);
+    SDValue RHS    = Node->getOperand(4);
+    MVT ResultVT   = Node->getSimpleValueType(0);
+
+    SDValue TargetCC = CurDAG->getTargetConstant(
+        cast<ConstantSDNode>(CCConst)->getZExtValue(), DL, MVT::i32);
+    unsigned PseudoOpc = (ResultVT == MVT::f32) ? MicroBlaze::SELECT_CC_FP_F32_PSEUDO
+                                                 : MicroBlaze::SELECT_CC_FP_PSEUDO;
+    SDNode *Selected = CurDAG->getMachineNode(PseudoOpc, DL, ResultVT,
+                                              {TrueV, FalseV, TargetCC, LHS, RHS});
+    ReplaceNode(Node, Selected);
+    return;
+  }
+
   SelectCode(Node);
 }

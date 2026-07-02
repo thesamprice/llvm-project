@@ -35,8 +35,15 @@ using namespace llvm;
 MicroBlazeTargetLowering::MicroBlazeTargetLowering(
     const MicroBlazeTargetMachine &TM, const MicroBlazeSubtarget &STI)
     : TargetLowering(TM, STI), Subtarget(STI) {
-  // i32 is the only native value type.
+  // i32 is always a native value type.
   addRegisterClass(MVT::i32, &MicroBlaze::GPRRegClass);
+
+  // With +hard-float, f32 values live in the same GPRs and are operated on
+  // by hardware FPU instructions (opcode 0x16).  Register f32 as a legal
+  // type so SelectionDAG can type-check and allocate FPR operands.
+  if (STI.hasHardFloat())
+    addRegisterClass(MVT::f32, &MicroBlaze::FPRRegClass);
+
   computeRegisterProperties(STI.getRegisterInfo());
 
   setStackPointerRegisterToSaveRestore(MicroBlaze::R1);
@@ -175,7 +182,7 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
     setLibcallImpl(RTLIB::MUL_F64, RTLIB::impl___muldf3);
     setLibcallImpl(RTLIB::DIV_F64, RTLIB::impl___divdf3);
     // f32 ↔ f64
-    setLibcallImpl(RTLIB::FPEXT_F32_F64,   RTLIB::impl___extendsfdf2);
+    setLibcallImpl(RTLIB::FPEXT_F32_F64,  RTLIB::impl___extendsfdf2);
     setLibcallImpl(RTLIB::FPROUND_F64_F32, RTLIB::impl___truncdfsf2);
     // f32 → integer
     setLibcallImpl(RTLIB::FPTOSINT_F32_I32, RTLIB::impl___fixsfsi);
@@ -198,21 +205,21 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
     setLibcallImpl(RTLIB::UINTTOFP_I32_F64, RTLIB::impl___floatunsidf);
     setLibcallImpl(RTLIB::UINTTOFP_I64_F64, RTLIB::impl___floatundidf);
     // f32 comparisons
-    setLibcallImpl(RTLIB::OEQ_F32, RTLIB::impl___eqsf2);
-    setLibcallImpl(RTLIB::UNE_F32, RTLIB::impl___nesf2);
-    setLibcallImpl(RTLIB::OLT_F32, RTLIB::impl___ltsf2);
-    setLibcallImpl(RTLIB::OLE_F32, RTLIB::impl___lesf2);
-    setLibcallImpl(RTLIB::OGT_F32, RTLIB::impl___gtsf2);
-    setLibcallImpl(RTLIB::OGE_F32, RTLIB::impl___gesf2);
-    setLibcallImpl(RTLIB::UO_F32,  RTLIB::impl___unordsf2);
+    setLibcallImpl(RTLIB::OEQ_F32,  RTLIB::impl___eqsf2);
+    setLibcallImpl(RTLIB::UNE_F32,  RTLIB::impl___nesf2);
+    setLibcallImpl(RTLIB::OLT_F32,  RTLIB::impl___ltsf2);
+    setLibcallImpl(RTLIB::OLE_F32,  RTLIB::impl___lesf2);
+    setLibcallImpl(RTLIB::OGT_F32,  RTLIB::impl___gtsf2);
+    setLibcallImpl(RTLIB::OGE_F32,  RTLIB::impl___gesf2);
+    setLibcallImpl(RTLIB::UO_F32,   RTLIB::impl___unordsf2);
     // f64 comparisons
-    setLibcallImpl(RTLIB::OEQ_F64, RTLIB::impl___eqdf2);
-    setLibcallImpl(RTLIB::UNE_F64, RTLIB::impl___nedf2);
-    setLibcallImpl(RTLIB::OLT_F64, RTLIB::impl___ltdf2);
-    setLibcallImpl(RTLIB::OLE_F64, RTLIB::impl___ledf2);
-    setLibcallImpl(RTLIB::OGT_F64, RTLIB::impl___gtdf2);
-    setLibcallImpl(RTLIB::OGE_F64, RTLIB::impl___gedf2);
-    setLibcallImpl(RTLIB::UO_F64,  RTLIB::impl___unorddf2);
+    setLibcallImpl(RTLIB::OEQ_F64,  RTLIB::impl___eqdf2);
+    setLibcallImpl(RTLIB::UNE_F64,  RTLIB::impl___nedf2);
+    setLibcallImpl(RTLIB::OLT_F64,  RTLIB::impl___ltdf2);
+    setLibcallImpl(RTLIB::OLE_F64,  RTLIB::impl___ledf2);
+    setLibcallImpl(RTLIB::OGT_F64,  RTLIB::impl___gtdf2);
+    setLibcallImpl(RTLIB::OGE_F64,  RTLIB::impl___gedf2);
+    setLibcallImpl(RTLIB::UO_F64,   RTLIB::impl___unorddf2);
     // f32 math libcalls (C99 single-precision variants)
     setLibcallImpl(RTLIB::FLOOR_F32,     RTLIB::impl_floorf);
     setLibcallImpl(RTLIB::CEIL_F32,      RTLIB::impl_ceilf);
@@ -255,6 +262,97 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
     setLibcallImpl(RTLIB::FMIN_F64,      RTLIB::impl_fmin);
     setLibcallImpl(RTLIB::FMAX_F64,      RTLIB::impl_fmax);
     setLibcallImpl(RTLIB::LDEXP_F64,     RTLIB::impl_ldexp);
+  } else {
+    // Hard-float: f32 arithmetic is Legal via TableGen FPU instruction
+    // patterns.  Operations not covered by hardware remain expanded.
+    //
+    // FADD / FSUB / FMUL / FDIV are available with +hard-float.
+    // FSQRT / SINT_TO_FP / FP_TO_SINT require +float-convert in addition.
+    // Everything else (FNEG, FABS, FP extensions, comparisons via SETCC)
+    // expands to the soft-float libcall sequence because MicroBlaze provides
+    // no dedicated instructions for those operations.
+    setOperationAction(ISD::FADD, MVT::f32, Legal);
+    setOperationAction(ISD::FSUB, MVT::f32, Legal);
+    setOperationAction(ISD::FMUL, MVT::f32, Legal);
+    setOperationAction(ISD::FDIV, MVT::f32, Legal);
+    if (STI.hasFloatConvert()) {
+      setOperationAction(ISD::FSQRT,     MVT::f32, Legal);
+      setOperationAction(ISD::SINT_TO_FP, MVT::i32, Legal);
+      setOperationAction(ISD::FP_TO_SINT, MVT::f32, Legal);
+    } else {
+      // No hardware float↔int conversion; fall back to __fixsfsi / __floatsisf.
+      setOperationAction(ISD::FP_TO_SINT, MVT::i32, Expand);
+      setOperationAction(ISD::FP_TO_SINT, MVT::i64, Expand);
+      setOperationAction(ISD::FP_TO_UINT, MVT::i32, Expand);
+      setOperationAction(ISD::FP_TO_UINT, MVT::i64, Expand);
+      setOperationAction(ISD::SINT_TO_FP, MVT::i32, Expand);
+      setOperationAction(ISD::SINT_TO_FP, MVT::i64, Expand);
+      setOperationAction(ISD::UINT_TO_FP, MVT::i32, Expand);
+      setOperationAction(ISD::UINT_TO_FP, MVT::i64, Expand);
+      setLibcallImpl(RTLIB::FPTOSINT_F32_I32, RTLIB::impl___fixsfsi);
+      setLibcallImpl(RTLIB::FPTOSINT_F32_I64, RTLIB::impl___fixsfdi);
+      setLibcallImpl(RTLIB::FPTOUINT_F32_I32, RTLIB::impl___fixunssfsi);
+      setLibcallImpl(RTLIB::FPTOUINT_F32_I64, RTLIB::impl___fixunssfdi);
+      setLibcallImpl(RTLIB::SINTTOFP_I32_F32, RTLIB::impl___floatsisf);
+      setLibcallImpl(RTLIB::SINTTOFP_I64_F32, RTLIB::impl___floatdisf);
+      setLibcallImpl(RTLIB::UINTTOFP_I32_F32, RTLIB::impl___floatunsisf);
+      setLibcallImpl(RTLIB::UINTTOFP_I64_F32, RTLIB::impl___floatundisf);
+    }
+    // FNEG has no hardware instruction; expand to (frsub 0.0, x) or libcall.
+    setOperationAction(ISD::FNEG,       MVT::f32, Expand);
+    setOperationAction(ISD::FABS,       MVT::f32, Expand);
+    setOperationAction(ISD::FP_EXTEND,  MVT::f64, Expand);
+    setOperationAction(ISD::FP_ROUND,   MVT::f32, Expand);
+
+    // MicroBlaze has no f64 hardware; expand all f64 ops to soft-float libcalls.
+    // Without these explicit Expand+libcall registrations, type softening would
+    // call makeLibCall without a registered impl and crash with "unsupported
+    // library call operation".
+    for (ISD::NodeType Op : {ISD::FADD, ISD::FSUB, ISD::FMUL, ISD::FDIV,
+                             ISD::FREM, ISD::FMA,  ISD::FNEG, ISD::FABS,
+                             ISD::FSQRT, ISD::FSIN, ISD::FCOS, ISD::FPOW,
+                             ISD::FLOG, ISD::FLOG2, ISD::FLOG10,
+                             ISD::FEXP, ISD::FEXP2, ISD::FRINT,
+                             ISD::FNEARBYINT, ISD::FCEIL, ISD::FFLOOR,
+                             ISD::FTRUNC, ISD::FROUND, ISD::FMINNUM,
+                             ISD::FMAXNUM, ISD::FCOPYSIGN, ISD::FLDEXP})
+      setOperationAction(Op, MVT::f64, Expand);
+    setLibcallImpl(RTLIB::ADD_F64,  RTLIB::impl___adddf3);
+    setLibcallImpl(RTLIB::SUB_F64,  RTLIB::impl___subdf3);
+    setLibcallImpl(RTLIB::MUL_F64,  RTLIB::impl___muldf3);
+    setLibcallImpl(RTLIB::DIV_F64,  RTLIB::impl___divdf3);
+    setLibcallImpl(RTLIB::FPEXT_F32_F64,   RTLIB::impl___extendsfdf2);
+    setLibcallImpl(RTLIB::FPROUND_F64_F32, RTLIB::impl___truncdfsf2);
+    setLibcallImpl(RTLIB::FPTOSINT_F64_I32, RTLIB::impl___fixdfsi);
+    setLibcallImpl(RTLIB::FPTOSINT_F64_I64, RTLIB::impl___fixdfdi);
+    setLibcallImpl(RTLIB::FPTOUINT_F64_I32, RTLIB::impl___fixunsdfsi);
+    setLibcallImpl(RTLIB::FPTOUINT_F64_I64, RTLIB::impl___fixunsdfdi);
+    setLibcallImpl(RTLIB::SINTTOFP_I32_F64, RTLIB::impl___floatsidf);
+    setLibcallImpl(RTLIB::SINTTOFP_I64_F64, RTLIB::impl___floatdidf);
+    setLibcallImpl(RTLIB::UINTTOFP_I32_F64, RTLIB::impl___floatunsidf);
+    setLibcallImpl(RTLIB::UINTTOFP_I64_F64, RTLIB::impl___floatundidf);
+    setLibcallImpl(RTLIB::OEQ_F64, RTLIB::impl___eqdf2);
+    setLibcallImpl(RTLIB::UNE_F64, RTLIB::impl___nedf2);
+    setLibcallImpl(RTLIB::OLT_F64, RTLIB::impl___ltdf2);
+    setLibcallImpl(RTLIB::OLE_F64, RTLIB::impl___ledf2);
+    setLibcallImpl(RTLIB::OGT_F64, RTLIB::impl___gtdf2);
+    setLibcallImpl(RTLIB::OGE_F64, RTLIB::impl___gedf2);
+    setLibcallImpl(RTLIB::UO_F64,  RTLIB::impl___unorddf2);
+    // SETCC on f32 produces i1 but FCMP produces float 0/1; the conversion
+    // is non-trivial, so expand SETCC and handle comparisons through BR_CC /
+    // SELECT_CC custom lowering instead.
+    setOperationAction(ISD::SETCC,      MVT::f32, Expand);
+    // BR_CC and SELECT_CC for f32 are custom-lowered to BR_CC_FP / SELECT_CC_FP
+    // which ISelDAGToDAG / EmitInstrWithCustomInserter expand to FCMP + branch.
+    setOperationAction(ISD::BR_CC,     MVT::f32, Custom);
+    // SELECT_CC result may be i32 (select int on float cmp) or f32 (float ternary).
+    setOperationAction(ISD::SELECT_CC, MVT::f32, Custom);
+    setOperationAction(ISD::SELECT,    MVT::f32, Expand);
+    // MicroBlaze has no separate FPU load/store instructions; float values
+    // are held in the same physical registers as integers.  Lower f32 load/store
+    // to i32 load/store + BITCAST so existing integer load/store patterns apply.
+    setOperationAction(ISD::LOAD,   MVT::f32, Custom);
+    setOperationAction(ISD::STORE,  MVT::f32, Custom);
   }
 
   // Lower global addresses, external symbols, and constant pool entries
@@ -279,11 +377,10 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   setOperationAction(ISD::CTTZ,  MVT::i32, Expand);
   setOperationAction(ISD::CTPOP, MVT::i32, Expand);
 
-  // With +reorder: SWAPB+SWAPH = 2-instruction bswap32. Without: expand to shifts.
-  setOperationAction(ISD::BSWAP,      MVT::i32,
-                     STI.hasReorderInstr() ? Legal : Expand);
-  setOperationAction(ISD::ROTL,       MVT::i32, Expand);
-  setOperationAction(ISD::ROTR,       MVT::i32, Expand);
+  // No byte-swap, bit-reverse, or rotate instructions.
+  setOperationAction(ISD::BSWAP,     MVT::i32, Expand);
+  setOperationAction(ISD::ROTL,      MVT::i32, Expand);
+  setOperationAction(ISD::ROTR,      MVT::i32, Expand);
   setOperationAction(ISD::BITREVERSE, MVT::i32, Expand);
 
   // 64-bit shifts decomposed into 32-bit pairs.
@@ -317,6 +414,8 @@ const char *MicroBlazeTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case MicroBlazeISD::SELECT_CC_CMP: return "MicroBlazeISD::SELECT_CC_CMP";
   case MicroBlazeISD::BR_CC_CMPU:    return "MicroBlazeISD::BR_CC_CMPU";
   case MicroBlazeISD::SELECT_CC_CMPU:return "MicroBlazeISD::SELECT_CC_CMPU";
+  case MicroBlazeISD::BR_CC_FP:      return "MicroBlazeISD::BR_CC_FP";
+  case MicroBlazeISD::SELECT_CC_FP:  return "MicroBlazeISD::SELECT_CC_FP";
   }
   return nullptr;
 }
@@ -338,9 +437,33 @@ SDValue MicroBlazeTargetLowering::LowerOperation(SDValue Op,
   case ISD::SRA:            return LowerShift(Op, DAG);
   case ISD::VASTART:        return LowerVASTART(Op, DAG);
   case ISD::VAARG:          return LowerVAARG(Op, DAG);
+  case ISD::LOAD:           return LowerFP32Load(Op, DAG);
+  case ISD::STORE:          return LowerFP32Store(Op, DAG);
   default:
     llvm_unreachable("Unexpected custom lowering");
   }
+}
+
+// MicroBlaze has no separate FPU load/store instructions: float values live
+// in the same physical registers as integers.  Represent f32 load/store as
+// i32 load/store followed by BITCAST so existing i32 memory patterns apply.
+SDValue MicroBlazeTargetLowering::LowerFP32Load(SDValue Op,
+                                                 SelectionDAG &DAG) const {
+  auto *LD = cast<LoadSDNode>(Op);
+  SDLoc DL(Op);
+  SDValue I32Val = DAG.getLoad(MVT::i32, DL, LD->getChain(), LD->getBasePtr(),
+                               LD->getMemOperand());
+  SDValue F32Val = DAG.getNode(ISD::BITCAST, DL, MVT::f32, I32Val);
+  return DAG.getMergeValues({F32Val, I32Val.getValue(1)}, DL);
+}
+
+SDValue MicroBlazeTargetLowering::LowerFP32Store(SDValue Op,
+                                                  SelectionDAG &DAG) const {
+  auto *ST = cast<StoreSDNode>(Op);
+  SDLoc DL(Op);
+  SDValue I32Val = DAG.getNode(ISD::BITCAST, DL, MVT::i32, ST->getValue());
+  return DAG.getStore(ST->getChain(), DL, I32Val, ST->getBasePtr(),
+                      ST->getMemOperand());
 }
 
 SDValue MicroBlazeTargetLowering::LowerSELECT_CC(SDValue Op,
@@ -352,23 +475,86 @@ SDValue MicroBlazeTargetLowering::LowerSELECT_CC(SDValue Op,
   SDValue FalseV = Op.getOperand(3);
   ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(4))->get();
 
+  // Float comparison: emit SELECT_CC_FP expanded by EmitInstrWithCustomInserter.
+  if (LHS.getValueType() == MVT::f32) {
+    SDValue CCVal = DAG.getConstant(CC, DL, MVT::i32);
+    return DAG.getNode(MicroBlazeISD::SELECT_CC_FP, DL, Op.getValueType(),
+                       TrueV, FalseV, CCVal, LHS, RHS);
+  }
+
+  // Integer comparison selecting between f32 values: UINT_TO_FP expansion
+  // can produce SELECT_CC(i32_cmp, f32_true, f32_false).  Since f32 and i32
+  // share the same GPRs, bitcast to i32, select, then bitcast back.
+  EVT ResVT = Op.getValueType();
+  bool ResIsFloat = ResVT == MVT::f32;
+  SDValue TV = ResIsFloat ? DAG.getBitcast(MVT::i32, TrueV)  : TrueV;
+  SDValue FV = ResIsFloat ? DAG.getBitcast(MVT::i32, FalseV) : FalseV;
+
+  SDValue Sel;
   if (Subtarget.hasPatternCompare()) {
     bool IsUnsignedIneq = (CC == ISD::SETUGT || CC == ISD::SETUGE ||
                            CC == ISD::SETULT || CC == ISD::SETULE);
     SDValue CCVal = DAG.getConstant(CC, DL, MVT::i32);
-    if (IsUnsignedIneq)
-      return DAG.getNode(MicroBlazeISD::SELECT_CC_CMPU, DL, Op.getValueType(),
-                         TrueV, FalseV, CCVal, LHS, RHS);
-    return DAG.getNode(MicroBlazeISD::SELECT_CC_CMP, DL, Op.getValueType(),
-                       TrueV, FalseV, CCVal, LHS, RHS);
+    unsigned Opc = IsUnsignedIneq ? MicroBlazeISD::SELECT_CC_CMPU
+                                  : MicroBlazeISD::SELECT_CC_CMP;
+    Sel = DAG.getNode(Opc, DL, MVT::i32, TV, FV, CCVal, LHS, RHS);
+  } else {
+    // Fallback: subtract and branch on sign/zero.
+    SDValue Diff  = DAG.getNode(ISD::SUB, DL, MVT::i32, LHS, RHS);
+    SDValue CCVal = DAG.getConstant(CC, DL, MVT::i32);
+    Sel = DAG.getNode(MicroBlazeISD::SELECT_CC, DL, MVT::i32, TV, FV, CCVal, Diff);
   }
-
-  // Fallback: subtract and branch on sign/zero.
-  SDValue Diff  = DAG.getNode(ISD::SUB, DL, MVT::i32, LHS, RHS);
-  SDValue CCVal = DAG.getConstant(CC, DL, MVT::i32);
-  return DAG.getNode(MicroBlazeISD::SELECT_CC, DL, Op.getValueType(),
-                     TrueV, FalseV, CCVal, Diff);
+  return ResIsFloat ? DAG.getBitcast(MVT::f32, Sel) : Sel;
 }
+
+// Map an f32 ISD::CondCode to the primary FCMP machine opcode and an optional
+// secondary opcode for "ordered primary OR unordered" conditions.
+// Returns false if the condition is not representable with hardware fcmp.
+//
+// Unordered conditions (SETULT, SETULE, etc.) decompose as:
+//   (ordered-op) OR (fcmp.un)  →  OR the two 0/1 float results, then BNEID.
+// SETO (ordered, i.e., neither is NaN) uses FCMP_UN + BEQID (invert).
+namespace llvm {
+bool getFCmpOpcodes(ISD::CondCode CC,
+                    unsigned &Opc1, unsigned &Opc2, bool &Invert) {
+  Opc2   = 0;
+  Invert = false;
+  switch (CC) {
+  // Direct ordered conditions → one FCMP instruction.
+  // UG984 §5: fcmp.XX rD, rA, rB has reversed operand semantics for inequality
+  // comparisons — fcmp.lt fires when rB < rA, fcmp.gt when rA < rB, etc.
+  // With rA=LHS, rB=RHS we therefore swap LT↔GT and LE↔GE so the hardware
+  // condition matches the DAG condition code.
+  case ISD::SETOEQ:  Opc1 = MicroBlaze::FCMP_EQ; return true;
+  case ISD::SETONE:  Opc1 = MicroBlaze::FCMP_NE; return true;
+  case ISD::SETOLT:  Opc1 = MicroBlaze::FCMP_GT; return true; // GT fires when LHS < RHS
+  case ISD::SETOGT:  Opc1 = MicroBlaze::FCMP_LT; return true; // LT fires when LHS > RHS
+  case ISD::SETOLE:  Opc1 = MicroBlaze::FCMP_GE; return true; // GE fires when LHS <= RHS
+  case ISD::SETOGE:  Opc1 = MicroBlaze::FCMP_LE; return true; // LE fires when LHS >= RHS
+  // Unordered check → fcmp.un directly.
+  case ISD::SETUO:   Opc1 = MicroBlaze::FCMP_UN; return true;
+  // Ordered check (neither is NaN) → fcmp.un + inverted branch.
+  case ISD::SETO:    Opc1 = MicroBlaze::FCMP_UN; Invert = true; return true;
+  // Unordered variants: ordered-op OR fcmp.un.
+  case ISD::SETUEQ:  Opc1 = MicroBlaze::FCMP_EQ; Opc2 = MicroBlaze::FCMP_UN; return true;
+  case ISD::SETUNE:  Opc1 = MicroBlaze::FCMP_NE; Opc2 = MicroBlaze::FCMP_UN; return true;
+  case ISD::SETULT:  Opc1 = MicroBlaze::FCMP_GT; Opc2 = MicroBlaze::FCMP_UN; return true;
+  case ISD::SETUGT:  Opc1 = MicroBlaze::FCMP_LT; Opc2 = MicroBlaze::FCMP_UN; return true;
+  case ISD::SETULE:  Opc1 = MicroBlaze::FCMP_GE; Opc2 = MicroBlaze::FCMP_UN; return true;
+  case ISD::SETUGE:  Opc1 = MicroBlaze::FCMP_LE; Opc2 = MicroBlaze::FCMP_UN; return true;
+  // Integer (NaN-unconcerned) conditions: emitted when nofpclass constraints
+  // let the DAGCombiner prove neither operand is NaN.  Since NaN is impossible
+  // these map identically to their ordered (SETO*) equivalents.
+  case ISD::SETEQ:   Opc1 = MicroBlaze::FCMP_EQ; return true;
+  case ISD::SETNE:   Opc1 = MicroBlaze::FCMP_NE; return true;
+  case ISD::SETLT:   Opc1 = MicroBlaze::FCMP_GT; return true;
+  case ISD::SETGT:   Opc1 = MicroBlaze::FCMP_LT; return true;
+  case ISD::SETLE:   Opc1 = MicroBlaze::FCMP_GE; return true;
+  case ISD::SETGE:   Opc1 = MicroBlaze::FCMP_LE; return true;
+  default: return false;
+  }
+}
+} // namespace llvm
 
 // Branch opcodes for CMP-based signed comparisons (UG984 §5).
 // CMP rD, rA, rB sets bit31=1 iff rA > rB signed; bits30:0 = rB - rA.
@@ -484,6 +670,45 @@ MachineBasicBlock *MicroBlazeTargetLowering::EmitInstrWithCustomInserter(
                                MI.getOperand(2).getReg());
   }
 
+  // SELECT_CC_FP_PSEUDO / SELECT_CC_FP_F32_PSEUDO:
+  //   dst(0) TrueV(1) FalseV(2) CC_imm(3) LHS_f32(4) RHS_f32(5)
+  // Emit FCMP (+ optional second FCMP + OR_ for unordered CCs), then diamond.
+  if (MI.getOpcode() == MicroBlaze::SELECT_CC_FP_PSEUDO ||
+      MI.getOpcode() == MicroBlaze::SELECT_CC_FP_F32_PSEUDO) {
+    DebugLoc DL = MI.getDebugLoc();
+    MachineFunction *MF = BB->getParent();
+    const TargetInstrInfo &TII = *MF->getSubtarget().getInstrInfo();
+    ISD::CondCode CC = static_cast<ISD::CondCode>(MI.getOperand(3).getImm());
+    Register LHSReg = MI.getOperand(4).getReg();
+    Register RHSReg = MI.getOperand(5).getReg();
+
+    unsigned Opc1, Opc2;
+    bool Invert;
+    if (!getFCmpOpcodes(CC, Opc1, Opc2, Invert))
+      llvm_unreachable("Unhandled f32 CC in SELECT_CC_FP pseudo");
+
+    Register FlagReg = MF->getRegInfo().createVirtualRegister(
+        &MicroBlaze::GPRRegClass);
+    BuildMI(*BB, MI, DL, TII.get(Opc1), FlagReg).addReg(LHSReg).addReg(RHSReg);
+
+    if (Opc2) {
+      Register Flag2 = MF->getRegInfo().createVirtualRegister(
+          &MicroBlaze::GPRRegClass);
+      BuildMI(*BB, MI, DL, TII.get(Opc2), Flag2).addReg(LHSReg).addReg(RHSReg);
+      Register OrReg = MF->getRegInfo().createVirtualRegister(
+          &MicroBlaze::GPRRegClass);
+      BuildMI(*BB, MI, DL, TII.get(MicroBlaze::OR_), OrReg)
+          .addReg(FlagReg).addReg(Flag2);
+      FlagReg = OrReg;
+    }
+
+    unsigned BrOpc = Invert ? MicroBlaze::BEQID : MicroBlaze::BNEID;
+    return emitSelectCCDiamond(MI, BB, BrOpc, FlagReg,
+                               MI.getOperand(0).getReg(),
+                               MI.getOperand(1).getReg(),
+                               MI.getOperand(2).getReg());
+  }
+
   DebugLoc DL = MI.getDebugLoc();
   MachineFunction *MF = BB->getParent();
   const TargetInstrInfo &TII = *MF->getSubtarget().getInstrInfo();
@@ -548,6 +773,13 @@ SDValue MicroBlazeTargetLowering::LowerBR_CC(SDValue Op,
   SDValue RHS  = Op.getOperand(3);
   SDValue Dest = Op.getOperand(4);
 
+  // Float comparison: emit BR_CC_FP which ISelDAGToDAG lowers to FCMP + branch.
+  if (LHS.getValueType() == MVT::f32) {
+    SDValue CCVal = DAG.getConstant(CC, DL, MVT::i32);
+    return DAG.getNode(MicroBlazeISD::BR_CC_FP, DL, MVT::Other,
+                       Chain, CCVal, LHS, RHS, Dest);
+  }
+
   // Zero-test: SETEQ/SETNE against zero needs no comparison instruction.
   // MicroBlaze beqid/bneid compare the operand register directly against zero,
   // so both the cmp/rsubk paths below would emit a redundant instruction.
@@ -587,8 +819,8 @@ SDValue MicroBlazeTargetLowering::LowerGlobalAddress(SDValue Op,
     // PIC: load the symbol's address from the GOT via R20.
     // Emits: imm HI16; lwi rD, r20, LO16  with R_MICROBLAZE_GOT_64.
     SDValue GOTSym = DAG.getTargetGlobalAddress(GAN->getGlobal(), DL, MVT::i32,
-                                                GAN->getOffset(),
-                                                MicroBlazeII::MO_GOT);
+                                                 GAN->getOffset(),
+                                                 MicroBlazeII::MO_GOT);
     return DAG.getNode(MicroBlazeISD::GOT_LOAD, DL,
                        DAG.getVTList(MVT::i32, MVT::Other),
                        DAG.getEntryNode(), GOTSym).getValue(0);
@@ -608,7 +840,7 @@ MicroBlazeTargetLowering::LowerExternalSymbol(SDValue Op,
 
   if (isPositionIndependent()) {
     SDValue GOTSym = DAG.getTargetExternalSymbol(Sym, MVT::i32,
-                                                 MicroBlazeII::MO_GOT);
+                                                  MicroBlazeII::MO_GOT);
     return DAG.getNode(MicroBlazeISD::GOT_LOAD, DL,
                        DAG.getVTList(MVT::i32, MVT::Other),
                        DAG.getEntryNode(), GOTSym).getValue(0);
@@ -641,11 +873,12 @@ SDValue MicroBlazeTargetLowering::LowerFormalArguments(
   MachineRegisterInfo &MRI = MF.getRegInfo();
   MicroBlazeMachineFunctionInfo *FuncInfo =
       MF.getInfo<MicroBlazeMachineFunctionInfo>();
-  SmallVector<SDValue, 8> OutChains;
 
   SmallVector<CCValAssign, 16> ArgLocs;
   CCState CCInfo(CallConv, IsVarArg, MF, ArgLocs, *DAG.getContext());
   CCInfo.AnalyzeFormalArguments(Ins, CC_MicroBlaze);
+
+  SmallVector<SDValue, 4> OutChains;
 
   for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
     CCValAssign &VA = ArgLocs[i];
@@ -722,6 +955,59 @@ SDValue MicroBlazeTargetLowering::LowerFormalArguments(
   if (!OutChains.empty())
     Chain = DAG.getNode(ISD::TokenFactor, DL, MVT::Other, OutChains);
   return Chain;
+}
+
+//===----------------------------------------------------------------------===//
+// Vararg lowering
+//===----------------------------------------------------------------------===//
+
+SDValue MicroBlazeTargetLowering::LowerVASTART(SDValue Op,
+                                                SelectionDAG &DAG) const {
+  MachineFunction &MF = DAG.getMachineFunction();
+  MicroBlazeMachineFunctionInfo *FuncInfo =
+      MF.getInfo<MicroBlazeMachineFunctionInfo>();
+  SDLoc DL(Op);
+  // va_start stores the address of the first vararg (the register save area).
+  SDValue FIN =
+      DAG.getFrameIndex(FuncInfo->getVarArgsFrameIndex(), MVT::i32);
+  const Value *SV = cast<SrcValueSDNode>(Op.getOperand(2))->getValue();
+  return DAG.getStore(Op.getOperand(0), DL, FIN, Op.getOperand(1),
+                      MachinePointerInfo(SV));
+}
+
+SDValue MicroBlazeTargetLowering::LowerVAARG(SDValue Op,
+                                               SelectionDAG &DAG) const {
+  SDNode *Node = Op.getNode();
+  EVT VT = Node->getValueType(0);
+  SDValue InChain = Node->getOperand(0);
+  SDValue VAListPtr = Node->getOperand(1);
+  const Value *SV = cast<SrcValueSDNode>(Node->getOperand(2))->getValue();
+  SDLoc DL(Node);
+
+  // va_list is a char* pointing at the next argument slot.
+  SDValue VAList = DAG.getLoad(MVT::i32, DL, InChain, VAListPtr,
+                                MachinePointerInfo(SV));
+  SDValue LoadChain = VAList.getValue(1);
+
+  // Load the argument value from *ap.
+  SDValue Result =
+      DAG.getExtLoad(ISD::EXTLOAD, DL, MVT::i32, LoadChain, VAList,
+                     MachinePointerInfo(), VT);
+  SDValue ResultChain = Result.getValue(1);
+
+  // Advance ap by sizeof(type) rounded up to a 4-byte boundary (UG984 ABI).
+  unsigned Bytes = ((VT.getSizeInBits() + 7) / 8 + 3) & ~3u;
+  SDValue NextPtr =
+      DAG.getNode(ISD::ADD, DL, MVT::i32, VAList,
+                  DAG.getConstant(Bytes, DL, MVT::i32));
+  SDValue StoreChain =
+      DAG.getStore(ResultChain, DL, NextPtr, VAListPtr, MachinePointerInfo(SV));
+
+  // Truncate back to the actual requested type if needed.
+  if (VT != MVT::i32)
+    Result = DAG.getNode(ISD::TRUNCATE, DL, VT, Result);
+
+  return DAG.getMergeValues({Result, StoreChain}, DL);
 }
 
 //===----------------------------------------------------------------------===//
@@ -868,59 +1154,6 @@ SDValue MicroBlazeTargetLowering::LowerReturn(
     RetOps.push_back(Flag);
 
   return DAG.getNode(MicroBlazeISD::RET_FLAG, DL, MVT::Other, RetOps);
-}
-
-//===----------------------------------------------------------------------===//
-// Vararg lowering
-//===----------------------------------------------------------------------===//
-
-SDValue MicroBlazeTargetLowering::LowerVASTART(SDValue Op,
-                                                SelectionDAG &DAG) const {
-  MachineFunction &MF = DAG.getMachineFunction();
-  MicroBlazeMachineFunctionInfo *FuncInfo =
-      MF.getInfo<MicroBlazeMachineFunctionInfo>();
-  SDLoc DL(Op);
-  // va_start stores the address of the first vararg (the register save area).
-  SDValue FIN =
-      DAG.getFrameIndex(FuncInfo->getVarArgsFrameIndex(), MVT::i32);
-  const Value *SV = cast<SrcValueSDNode>(Op.getOperand(2))->getValue();
-  return DAG.getStore(Op.getOperand(0), DL, FIN, Op.getOperand(1),
-                      MachinePointerInfo(SV));
-}
-
-SDValue MicroBlazeTargetLowering::LowerVAARG(SDValue Op,
-                                              SelectionDAG &DAG) const {
-  SDNode *Node = Op.getNode();
-  EVT VT = Node->getValueType(0);
-  SDValue InChain = Node->getOperand(0);
-  SDValue VAListPtr = Node->getOperand(1);
-  const Value *SV = cast<SrcValueSDNode>(Node->getOperand(2))->getValue();
-  SDLoc DL(Node);
-
-  // va_list is a char* pointing at the next argument slot.
-  SDValue VAList = DAG.getLoad(MVT::i32, DL, InChain, VAListPtr,
-                               MachinePointerInfo(SV));
-  SDValue LoadChain = VAList.getValue(1);
-
-  // Load the argument value from *ap.
-  SDValue Result =
-      DAG.getExtLoad(ISD::EXTLOAD, DL, MVT::i32, LoadChain, VAList,
-                     MachinePointerInfo(), VT);
-  SDValue ResultChain = Result.getValue(1);
-
-  // Advance ap by sizeof(type) rounded up to a 4-byte boundary (UG984 ABI).
-  unsigned Bytes = ((VT.getSizeInBits() + 7) / 8 + 3) & ~3u;
-  SDValue NextPtr =
-      DAG.getNode(ISD::ADD, DL, MVT::i32, VAList,
-                  DAG.getConstant(Bytes, DL, MVT::i32));
-  SDValue StoreChain =
-      DAG.getStore(ResultChain, DL, NextPtr, VAListPtr, MachinePointerInfo(SV));
-
-  // Truncate back to the actual requested type if needed.
-  if (VT != MVT::i32)
-    Result = DAG.getNode(ISD::TRUNCATE, DL, VT, Result);
-
-  return DAG.getMergeValues({Result, StoreChain}, DL);
 }
 
 //===----------------------------------------------------------------------===//

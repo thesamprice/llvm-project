@@ -11,7 +11,7 @@
 // UG984 §5 Figs 83-89. C_USE_FPU=1 (Basic) or 2 (Extended). Latency varies.
 //   fadd  rD, rA, rB — func=0x000  (4/6/1 cycles area opt 0/1/2)
 //   frsub rD, rA, rB — func=0x080  (4/6/1 cycles)
-//   fmul  rD, rA, rB — func=0x100  (4/6/1 cycles)
+//   fmul  rD, rA, rB — func=0x100  (3/5/1 cycles)
 //   fdiv  rD, rA, rB — func=0x180  (30/32/29 cycles)
 //   fcmp  rD, rA, rB — func=0x200 | (OpSel << 4); OpSel in bits[6:4]
 //     fcmp.un OpSel=0b000 → func=0x200
@@ -21,32 +21,88 @@
 //     fcmp.gt OpSel=0b100 → func=0x240
 //     fcmp.ne OpSel=0b101 → func=0x250
 //     fcmp.ge OpSel=0b110 → func=0x260
+//
+// hasSideEffects = 0, mayRaiseFPException = 1: these instructions have no
+// architectural memory side effects; the only observable side effect is
+// raising an IEEE 754 exception visible through the FP environment register
+// (FSR).  Using mayRaiseFPException (not hasSideEffects) allows the scheduler
+// and CSE to freely reorder FPU ops relative to each other and to integer
+// ops, while still respecting strict-FP barriers where required (UG984 §5).
 //===----------------------------------------------------------------------===//
 
-let Predicates = [HasHardFloatPred], hasSideEffects = 1 in {
-  def FADD  : MBA<0x16, 0x000, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                  "fadd\t$rD, $rA, $rB", [], IIC_FPU>;
-  def FRSUB : MBA<0x16, 0x080, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                  "frsub\t$rD, $rA, $rB", [], IIC_FPU>;
-  def FMUL  : MBA<0x16, 0x100, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                  "fmul\t$rD, $rA, $rB", [], IIC_FPU>;
-  def FDIV  : MBA<0x16, 0x180, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                  "fdiv\t$rD, $rA, $rB", [], IIC_FPU>;
+let Predicates = [HasHardFloatPred],
+    hasSideEffects = 0, mayRaiseFPException = 1 in {
+  def FADD  : MBA<0x16, 0x000, (outs FPR:$rD), (ins FPR:$rA, FPR:$rB),
+                  "fadd\t$rD, $rA, $rB",
+                  [(set FPR:$rD, (fadd FPR:$rA, FPR:$rB))], IIC_FPUAdd>;
+  // frsub rD, rA, rB computes rD = rB - rA (operands reversed vs. subtract).
+  // The DAG pattern swaps the operands so (fsub $a, $b) → frsub $b, $a.
+  def FRSUB : MBA<0x16, 0x080, (outs FPR:$rD), (ins FPR:$rA, FPR:$rB),
+                  "frsub\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+  def FMUL  : MBA<0x16, 0x100, (outs FPR:$rD), (ins FPR:$rA, FPR:$rB),
+                  "fmul\t$rD, $rA, $rB",
+                  [(set FPR:$rD, (fmul FPR:$rA, FPR:$rB))], IIC_FPUMul>;
+  def FDIV  : MBA<0x16, 0x180, (outs FPR:$rD), (ins FPR:$rA, FPR:$rB),
+                  "fdiv\t$rD, $rA, $rB",
+                  [(set FPR:$rD, (fdiv FPR:$rA, FPR:$rB))], IIC_FPUDiv>;
 
-  def FCMP_UN : MBA<0x16, 0x200, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.un\t$rD, $rA, $rB", [], IIC_FPU>;
-  def FCMP_LT : MBA<0x16, 0x210, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.lt\t$rD, $rA, $rB", [], IIC_FPU>;
-  def FCMP_EQ : MBA<0x16, 0x220, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.eq\t$rD, $rA, $rB", [], IIC_FPU>;
-  def FCMP_LE : MBA<0x16, 0x230, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.le\t$rD, $rA, $rB", [], IIC_FPU>;
-  def FCMP_GT : MBA<0x16, 0x240, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.gt\t$rD, $rA, $rB", [], IIC_FPU>;
-  def FCMP_NE : MBA<0x16, 0x250, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.ne\t$rD, $rA, $rB", [], IIC_FPU>;
-  def FCMP_GE : MBA<0x16, 0x260, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
-                    "fcmp.ge\t$rD, $rA, $rB", [], IIC_FPU>;
+  // fcmp variants write a float result (0.0 or 1.0) to a GPR.  They are
+  // defined here for encoding completeness; SETCC lowering via hardware fcmp
+  // is handled in MicroBlazeISelLowering (deferred — custom lowering needed
+  // to convert the float 0/1 result into an i1 branch condition).
+  def FCMP_UN : MBA<0x16, 0x200, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
+                    "fcmp.un\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+  def FCMP_LT : MBA<0x16, 0x210, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
+                    "fcmp.lt\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+  def FCMP_EQ : MBA<0x16, 0x220, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
+                    "fcmp.eq\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+  def FCMP_LE : MBA<0x16, 0x230, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
+                    "fcmp.le\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+  def FCMP_GT : MBA<0x16, 0x240, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
+                    "fcmp.gt\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+  def FCMP_NE : MBA<0x16, 0x250, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
+                    "fcmp.ne\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+  def FCMP_GE : MBA<0x16, 0x260, (outs GPR:$rD), (ins FPR:$rA, FPR:$rB),
+                    "fcmp.ge\t$rD, $rA, $rB", [], IIC_FPUAdd>;
+}
+
+// fsub a, b → frsub b, a  (swap operands: frsub rD,rA,rB = rB - rA)
+def : Pat<(fsub f32:$a, f32:$b), (FRSUB FPR:$b, FPR:$a)>,
+      Requires<[HasHardFloatPred]>;
+
+// BITCAST between f32 and i32: MicroBlaze uses the same physical registers for
+// both; the type-cast is a no-op at the machine level.
+// COPY_TO_REGCLASS emits a TargetOpcode::COPY constrained to the target class;
+// the register allocator coalesces it (same physical register set, no spill).
+def : Pat<(f32 (bitconvert (i32 GPR:$x))), (COPY_TO_REGCLASS GPR:$x, FPR)>,
+      Requires<[HasHardFloatPred]>;
+def : Pat<(i32 (bitconvert (f32 FPR:$x))), (COPY_TO_REGCLASS FPR:$x, GPR)>,
+      Requires<[HasHardFloatPred]>;
+
+//===----------------------------------------------------------------------===//
+// Float conditional-select pseudos (SELECT_CC_FP / SELECT_CC_FP_F32)
+// Expanded by EmitInstrWithCustomInserter to FCMP + diamond CFG.
+// ISelDAGToDAG::Select() creates these directly from MicroBlazeISD::SELECT_CC_FP.
+//
+// SELECT_CC_FP_PSEUDO: integer-valued select on a float comparison (e.g.,
+//   int r = (a < b) ? x : y).  dst and TrueV/FalseV are in GPR.
+//
+// SELECT_CC_FP_F32_PSEUDO: float-valued select on a float comparison (e.g.,
+//   float r = (a < b) ? x : y).  dst and TrueV/FalseV are in FPR.
+//
+// In both cases LHS and RHS are FPR (the float operands being compared).
+// Operands: dst, TrueV, FalseV, CC (ISD::CondCode imm), LHS, RHS
+//===----------------------------------------------------------------------===//
+
+let usesCustomInserter = 1, Predicates = [HasHardFloatPred] in {
+  def SELECT_CC_FP_PSEUDO : MBPseudo<
+      (outs GPR:$dst),
+      (ins GPR:$T, GPR:$F, i32imm:$CC, FPR:$LHS, FPR:$RHS),
+      "#SELECT_CC_FP $dst, $T, $F, $CC, $LHS, $RHS", []>;
+  def SELECT_CC_FP_F32_PSEUDO : MBPseudo<
+      (outs FPR:$dst),
+      (ins FPR:$T, FPR:$F, i32imm:$CC, FPR:$LHS, FPR:$RHS),
+      "#SELECT_CC_FP_F32 $dst, $T, $F, $CC, $LHS, $RHS", []>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -57,11 +113,21 @@ let Predicates = [HasHardFloatPred], hasSideEffects = 1 in {
 //   fsqrt rD, rA — sqrt       func=0x380  (27/29/23 cycles)
 //===----------------------------------------------------------------------===//
 
-let Predicates = [HasFloatConvertPred], hasSideEffects = 1 in {
-  def FLT   : MBA<0x16, 0x280, (outs GPR:$rD), (ins GPR:$rA),
-                  "flt\t$rD, $rA", [], IIC_FPU> { let rB = 0; }
-  def FINT  : MBA<0x16, 0x300, (outs GPR:$rD), (ins GPR:$rA),
-                  "fint\t$rD, $rA", [], IIC_FPU> { let rB = 0; }
-  def FSQRT : MBA<0x16, 0x380, (outs GPR:$rD), (ins GPR:$rA),
-                  "fsqrt\t$rD, $rA", [], IIC_FPU> { let rB = 0; }
+let Predicates = [HasFloatConvertPred],
+    hasSideEffects = 0, mayRaiseFPException = 1 in {
+  def FLT   : MBA<0x16, 0x280, (outs FPR:$rD), (ins GPR:$rA),
+                  "flt\t$rD, $rA",
+                  [(set FPR:$rD, (sint_to_fp GPR:$rA))], IIC_FPUAdd> {
+    let rB = 0;
+  }
+  def FINT  : MBA<0x16, 0x300, (outs GPR:$rD), (ins FPR:$rA),
+                  "fint\t$rD, $rA",
+                  [(set GPR:$rD, (fp_to_sint FPR:$rA))], IIC_FPUAdd> {
+    let rB = 0;
+  }
+  def FSQRT : MBA<0x16, 0x380, (outs FPR:$rD), (ins FPR:$rA),
+                  "fsqrt\t$rD, $rA",
+                  [(set FPR:$rD, (fsqrt FPR:$rA))], IIC_FPUDiv> {
+    let rB = 0;
+  }
 }
