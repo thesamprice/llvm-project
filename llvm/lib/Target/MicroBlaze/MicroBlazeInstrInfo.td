@@ -146,4 +146,5 @@ include "MicroBlazeInstrAtomics.td"
 include "MicroBlazeInstrReorder.td"
 include "MicroBlazeInstrCache.td"
 include "MicroBlazeInstrFPU.td"
+include "MicroBlazeInstrFSL.td"
 

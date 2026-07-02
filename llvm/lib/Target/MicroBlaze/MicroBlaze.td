@@ -36,6 +36,9 @@ def FeatureFloatConvert : SubtargetFeature<"float-convert", "HasFloatConvert",
 def FeatureExtendedAddr : SubtargetFeature<"extended-addr", "HasExtendedAddr",
     "true", "Enable extended-address memory instructions (lbuea, lhuea, lwea, sbea, shea, swea)">;
 
+def FeatureFSL : SubtargetFeature<"fsl", "HasFSL",
+    "true", "Enable FSL/AXI-Stream stream interface instructions (get, put, getd, putd, and variants)">;
+
 //===----------------------------------------------------------------------===//
 // Register file, Calling Conv, Instruction Descriptions (added in later commits)
 //===----------------------------------------------------------------------===//

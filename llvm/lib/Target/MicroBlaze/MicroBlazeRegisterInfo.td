@@ -71,3 +71,27 @@ def GPR : RegisterClass<"MicroBlaze", [i32], 32, (add
     // Reserved — available for asm but not allocated by the register allocator
     R0, R1, R2, R13, R14, R15, R16, R17, R18
 )>;
+
+//===----------------------------------------------------------------------===//
+// FSL port "registers" rfsl0-rfsl15
+// Used as static FSL get/put operands (opcode 0x1B, bits[7:4]).
+// HWEncoding is the 4-bit port number placed in instruction bits[7:4].
+// The RFSL register class is not allocatable — rfslN appear only in asm.
+//===----------------------------------------------------------------------===//
+
+foreach I = 0-15 in {
+  def rfsl#I : Register<"rfsl"#I> {
+    let Namespace = "MicroBlaze";
+    let HWEncoding = I;
+  }
+}
+
+def RFSL : RegisterClass<"MicroBlaze", [i32], 32, (add
+    rfsl0,  rfsl1,  rfsl2,  rfsl3,
+    rfsl4,  rfsl5,  rfsl6,  rfsl7,
+    rfsl8,  rfsl9,  rfsl10, rfsl11,
+    rfsl12, rfsl13, rfsl14, rfsl15)> {
+  let Size = 32;
+  let isAllocatable = 0;
+}
+

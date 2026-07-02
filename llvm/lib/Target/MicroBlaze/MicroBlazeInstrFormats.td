@@ -40,6 +40,8 @@ def HasFloatConvertPred : Predicate<"Subtarget->hasFloatConvert()">,
     AssemblerPredicate<(all_of FeatureFloatConvert), "float-convert">;
 def HasExtendedAddrPred : Predicate<"Subtarget->hasExtendedAddr()">,
     AssemblerPredicate<(all_of FeatureExtendedAddr), "extended-addr">;
+def HasFSLPred : Predicate<"Subtarget->hasFSL()">,
+    AssemblerPredicate<(all_of FeatureFSL), "fsl">;
 
 //===----------------------------------------------------------------------===//
 // Base instruction class
@@ -168,4 +170,101 @@ class MBMSR<bit clr, dag outs, dag ins, string asmstr, list<dag> pattern>
   let Inst{16}    = clr;
   let Inst{15}    = 0;
   let Inst{14-0}  = imm;
+}
+
+//===----------------------------------------------------------------------===//
+// FSL (Fast Simplex Link / AXI-Stream) instruction format classes
+// UG984 §5.  Static opcode 0x1B, dynamic opcode 0x13.
+//
+// Flag bits shared by all FSL variants:
+//   P = put (1) vs get (0)
+//   N = non-blocking
+//   C = control channel
+//   T = test (don't consume data)
+//   A = acknowledge
+//   E = exception enable
+//
+// Static encoding (opcode 0x1B):
+//   [15]=P  [14]=N  [13]=C  [12]=T  [11]=A  [10]=E  [9:8]=0  [7:4]=port  [3:0]=0
+//
+// Dynamic encoding (opcode 0x13):
+//   [15:11]=rB  [10]=P  [9]=N  [8]=C  [7]=T  [6]=A  [5]=E  [4:0]=0
+//===----------------------------------------------------------------------===//
+
+// MBFSLG — static FSL get: rD ← FSL_port[rfslN]
+//   Opcode 0x1B, P=0.  Port number in bits[7:4] as 4-bit immediate.
+class MBFSLG<bit N, bit C, bit T, bit A, bit E>
+    : MBInst<(outs GPR:$rD), (ins RFSL:$port), "", []> {
+  bits<5> rD;
+  bits<4> port;
+  let Inst{31-26} = 0x1B;
+  let Inst{25-21} = rD;
+  let Inst{20-16} = 0;
+  let Inst{15}    = 0;   // P=0 (get)
+  let Inst{14}    = N;
+  let Inst{13}    = C;
+  let Inst{12}    = T;
+  let Inst{11}    = A;
+  let Inst{10}    = E;
+  let Inst{9-8}   = 0;
+  let Inst{7-4}   = port;
+  let Inst{3-0}   = 0;
+}
+
+// MBFSLP — static FSL put: FSL_port[rfslN] ← rA
+//   Opcode 0x1B, P=1.  Port number in bits[7:4] as 4-bit immediate.
+class MBFSLP<bit N, bit C, bit T, bit A, bit E>
+    : MBInst<(outs), (ins GPR:$rA, RFSL:$port), "", []> {
+  bits<5> rA;
+  bits<4> port;
+  let Inst{31-26} = 0x1B;
+  let Inst{25-21} = 0;
+  let Inst{20-16} = rA;
+  let Inst{15}    = 1;   // P=1 (put)
+  let Inst{14}    = N;
+  let Inst{13}    = C;
+  let Inst{12}    = T;
+  let Inst{11}    = A;
+  let Inst{10}    = E;
+  let Inst{9-8}   = 0;
+  let Inst{7-4}   = port;
+  let Inst{3-0}   = 0;
+}
+
+// MBFSLDG — dynamic FSL get: rD ← FSL_port[rB]
+//   Opcode 0x13, P=0.  Port number in GPR rB (bits[15:11]).
+class MBFSLDG<bit N, bit C, bit T, bit A, bit E>
+    : MBInst<(outs GPR:$rD), (ins GPR:$rB), "", []> {
+  bits<5> rD;
+  bits<5> rB;
+  let Inst{31-26} = 0x13;
+  let Inst{25-21} = rD;
+  let Inst{20-16} = 0;
+  let Inst{15-11} = rB;
+  let Inst{10}    = 0;   // P=0 (get)
+  let Inst{9}     = N;
+  let Inst{8}     = C;
+  let Inst{7}     = T;
+  let Inst{6}     = A;
+  let Inst{5}     = E;
+  let Inst{4-0}   = 0;
+}
+
+// MBFSLDP — dynamic FSL put: FSL_port[rB] ← rA
+//   Opcode 0x13, P=1.  Port number in GPR rB (bits[15:11]).
+class MBFSLDP<bit N, bit C, bit T, bit A, bit E>
+    : MBInst<(outs), (ins GPR:$rA, GPR:$rB), "", []> {
+  bits<5> rA;
+  bits<5> rB;
+  let Inst{31-26} = 0x13;
+  let Inst{25-21} = 0;
+  let Inst{20-16} = rA;
+  let Inst{15-11} = rB;
+  let Inst{10}    = 1;   // P=1 (put)
+  let Inst{9}     = N;
+  let Inst{8}     = C;
+  let Inst{7}     = T;
+  let Inst{6}     = A;
+  let Inst{5}     = E;
+  let Inst{4-0}   = 0;
 }
