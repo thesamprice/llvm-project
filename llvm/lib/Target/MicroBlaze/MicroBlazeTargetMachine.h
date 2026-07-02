@@ -11,6 +11,7 @@
 
 #include "MicroBlazeMachineFunctionInfo.h"
 #include "MicroBlazeSubtarget.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/CodeGen/CodeGenTargetMachineImpl.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include <memory>
@@ -21,6 +22,7 @@ namespace llvm {
 class MicroBlazeTargetMachine : public CodeGenTargetMachineImpl {
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
   MicroBlazeSubtarget Subtarget;
+  mutable StringMap<std::unique_ptr<MicroBlazeSubtarget>> SubtargetMap;
 
 public:
   MicroBlazeTargetMachine(const Target &TheTarget, const Triple &TargetTriple,
@@ -33,9 +35,7 @@ public:
   ~MicroBlazeTargetMachine() override = default;
 
   const MicroBlazeSubtarget *
-  getSubtargetImpl(const Function &) const override {
-    return &Subtarget;
-  }
+  getSubtargetImpl(const Function &F) const override;
 
   TargetLoweringObjectFile *getObjFileLowering() const override {
     return TLOF.get();

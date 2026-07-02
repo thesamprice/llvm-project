@@ -29,6 +29,22 @@ static Reloc::Model getEffectiveRelocModel(std::optional<Reloc::Model> RM) {
   return RM.value_or(Reloc::Static);
 }
 
+const MicroBlazeSubtarget *
+MicroBlazeTargetMachine::getSubtargetImpl(const Function &F) const {
+  Attribute CPUAttr = F.getFnAttribute("target-cpu");
+  Attribute FSAttr  = F.getFnAttribute("target-features");
+
+  std::string CPU = CPUAttr.isValid() ? CPUAttr.getValueAsString().str()
+                                       : TargetCPU;
+  std::string FS  = FSAttr.isValid()  ? FSAttr.getValueAsString().str()
+                                       : TargetFS;
+
+  auto &I = SubtargetMap[CPU + FS];
+  if (!I)
+    I = std::make_unique<MicroBlazeSubtarget>(TargetTriple, CPU, FS, *this);
+  return I.get();
+}
+
 MicroBlazeTargetMachine::MicroBlazeTargetMachine(
     const Target &T, const Triple &TT, StringRef Cpu, StringRef FeatureString,
     const TargetOptions &Options, std::optional<Reloc::Model> RM,
