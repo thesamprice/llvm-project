@@ -479,6 +479,14 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   // MBAR 0 would also clear the BTC; MBAR 1 avoids that cost.
   setOperationAction(ISD::ATOMIC_FENCE, MVT::Other, Custom);
 
+  // __builtin_frame_address / __builtin_return_address.
+  // MicroBlaze has no dedicated frame-pointer register, so FRAMEADDR returns
+  // R1 (the stack pointer) for depth 0.  RETURNADDR reads R15 (the hardware
+  // link register) at function entry.  Depth > 0 requires stack walking,
+  // which in turn requires saving a frame chain; unsupported.
+  setOperationAction(ISD::FRAMEADDR,  MVT::i32, Custom);
+  setOperationAction(ISD::RETURNADDR, MVT::i32, Custom);
+
   setMinFunctionAlignment(Align(4));
 }
 
@@ -540,6 +548,54 @@ const char *MicroBlazeTargetLowering::getTargetNodeName(unsigned Opcode) const {
 }
 
 //===----------------------------------------------------------------------===//
+// Frame and return address lowering
+//===----------------------------------------------------------------------===//
+
+SDValue MicroBlazeTargetLowering::LowerFRAMEADDR(SDValue Op,
+                                                  SelectionDAG &DAG) const {
+  MachineFunction &MF = DAG.getMachineFunction();
+  MachineFrameInfo &MFI = MF.getFrameInfo();
+  MFI.setFrameAddressIsTaken(true);
+
+  unsigned Depth = Op.getConstantOperandVal(0);
+  if (Depth > 0)
+    // MicroBlaze has no dedicated frame-pointer register so walking the frame
+    // chain is not supported.  Callers that need depth > 0 must use a
+    // target with a saved-FP convention.
+    report_fatal_error(
+        "MicroBlaze: __builtin_frame_address with depth > 0 is not supported");
+
+  EVT VT = Op.getValueType();
+  SDLoc DL(Op);
+  // Without a dedicated frame pointer, R1 (the stack pointer) is the closest
+  // approximation.  It points to the bottom of the current frame immediately
+  // after the prologue, which is the frame base for leaf functions.
+  Register FP = Subtarget.getRegisterInfo()->getFrameRegister(MF);
+  return DAG.getCopyFromReg(DAG.getEntryNode(), DL, FP, VT);
+}
+
+SDValue MicroBlazeTargetLowering::LowerRETURNADDR(SDValue Op,
+                                                   SelectionDAG &DAG) const {
+  MachineFunction &MF = DAG.getMachineFunction();
+  MachineFrameInfo &MFI = MF.getFrameInfo();
+  MFI.setReturnAddressIsTaken(true);
+
+  unsigned Depth = Op.getConstantOperandVal(0);
+  if (Depth > 0)
+    // Unwinding through multiple frames requires a saved frame-pointer chain,
+    // which MicroBlaze does not maintain by default.
+    report_fatal_error(
+        "MicroBlaze: __builtin_return_address with depth > 0 is not supported");
+
+  EVT VT = Op.getValueType();
+  SDLoc DL(Op);
+  // R15 is the hardware link register; it holds the return address at function
+  // entry.  Anchoring the copy to getEntryNode() captures the entry value
+  // before any calls inside the function overwrite R15.
+  return DAG.getCopyFromReg(DAG.getEntryNode(), DL, MicroBlaze::R15, VT);
+}
+
+//===----------------------------------------------------------------------===//
 // Custom lowering
 //===----------------------------------------------------------------------===//
 
@@ -586,6 +642,10 @@ SDValue MicroBlazeTargetLowering::LowerOperation(SDValue Op,
     return LowerUADDO_CARRY(Op, DAG);
   case ISD::USUBO_CARRY:
     return LowerUSUBO_CARRY(Op, DAG);
+  case ISD::FRAMEADDR:
+    return LowerFRAMEADDR(Op, DAG);
+  case ISD::RETURNADDR:
+    return LowerRETURNADDR(Op, DAG);
   default:
     llvm_unreachable("Unexpected custom lowering");
   }

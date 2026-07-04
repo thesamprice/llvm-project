@@ -163,6 +163,8 @@ private:
   SDValue LowerFP32Store(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue LowerABS(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerRETURNADDR(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerUADDO(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerUSUBO(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerUADDO_CARRY(SDValue Op, SelectionDAG &DAG) const;
