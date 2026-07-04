@@ -51,6 +51,23 @@ public:
 ABIArgInfo MicroBlazeABIInfo::classifyArgumentType(QualType Ty) const {
   Ty = useFirstFieldIfTransparentUnion(Ty);
 
+  // MicroBlaze has no vector hardware.  Coerce vector arguments to integer
+  // words using the same [N x i32] convention as aggregates so the calling
+  // convention assigns each 32-bit slot to a register (R5–R10) or stack word.
+  // The large-struct compile-time cap also applies: see classifyReturnType.
+  if (Ty->isVectorType()) {
+    uint64_t ByteSize = getContext().getTypeSize(Ty) / 8;
+    if (ByteSize > 8192)
+      return getNaturalAlignIndirect(Ty, getDataLayout().getAllocaAddrSpace(),
+                                     /*ByVal=*/true);
+    uint64_t NumWords = (ByteSize + 3) / 4;
+    llvm::Type *Int32Ty = llvm::Type::getInt32Ty(getVMContext());
+    llvm::Type *CoerceTy =
+        NumWords == 1 ? static_cast<llvm::Type *>(Int32Ty)
+                      : llvm::ArrayType::get(Int32Ty, NumWords);
+    return ABIArgInfo::getDirect(CoerceTy);
+  }
+
   if (isAggregateTypeForABI(Ty)) {
     // C++ record types may require indirect passing (e.g. non-trivial copy).
     if (const RecordType *RT = Ty->getAsCanonical<RecordType>()) {
@@ -105,6 +122,20 @@ ABIArgInfo MicroBlazeABIInfo::classifyArgumentType(QualType Ty) const {
 ABIArgInfo MicroBlazeABIInfo::classifyReturnType(QualType RetTy) const {
   if (RetTy->isVoidType())
     return ABIArgInfo::getIgnore();
+
+  // Vectors have no hardware representation.  Small vectors (≤8 bytes) fit in
+  // R3:R4 and are returned as i32 or [2 x i32]; larger vectors use sret.
+  if (RetTy->isVectorType()) {
+    uint64_t ByteSize = getContext().getTypeSize(RetTy) / 8;
+    if (ByteSize > 8)
+      return getNaturalAlignIndirect(RetTy, getDataLayout().getAllocaAddrSpace());
+    uint64_t NumWords = (ByteSize + 3) / 4;
+    llvm::Type *Int32Ty = llvm::Type::getInt32Ty(getVMContext());
+    llvm::Type *CoerceTy =
+        NumWords == 1 ? static_cast<llvm::Type *>(Int32Ty)
+                      : llvm::ArrayType::get(Int32Ty, NumWords);
+    return ABIArgInfo::getDirect(CoerceTy);
+  }
 
   if (isAggregateTypeForABI(RetTy)) {
     // Small aggregates (≤8 bytes) fit in R3:R4 and are coerced to [N x i32].
