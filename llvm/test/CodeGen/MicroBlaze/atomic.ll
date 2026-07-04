@@ -14,7 +14,7 @@ define i32 @test_cmpxchg(ptr %p, i32 %expected, i32 %desired) {
 ; CHECK-NEXT:    lwx r3, r5, r0
 ; CHECK-EMPTY:
 ; CHECK-NEXT:    #NO_APP
-; CHECK-NEXT:    cmp r4, r3, r6
+; CHECK-NEXT:    rsubk r4, r3, r6
 ; CHECK-NEXT:    bnei r4, .LBB0_3
 ; CHECK-NEXT:  .LBB0_2: # %cmpxchg.trystore
 ; CHECK-NEXT:    # in Loop: Header=BB0_1 Depth=1
@@ -46,7 +46,7 @@ define i1 @test_cmpxchg_bool(ptr %p, i32 %expected, i32 %desired) {
 ; CHECK-NEXT:    lwx r3, r5, r0
 ; CHECK-EMPTY:
 ; CHECK-NEXT:    #NO_APP
-; CHECK-NEXT:    cmp r3, r3, r6
+; CHECK-NEXT:    rsubk r3, r3, r6
 ; CHECK-NEXT:    bnei r3, .LBB1_4
 ; CHECK-NEXT:  .LBB1_2: # %cmpxchg.trystore
 ; CHECK-NEXT:    # in Loop: Header=BB1_1 Depth=1

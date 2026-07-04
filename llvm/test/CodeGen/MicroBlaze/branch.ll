@@ -29,8 +29,8 @@ else:
 define i32 @min(i32 %a, i32 %b) {
 ; CHECK-LABEL: min:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmp r3, r5, r6
-; CHECK-NEXT:    blei r3, .LBB1_2
+; CHECK-NEXT:    cmp r3, r6, r5
+; CHECK-NEXT:    bgei r3, .LBB1_2
 ; CHECK-NEXT:  .LBB1_1: # %then
 ; CHECK-NEXT:    rtsd r15, 8
 ; CHECK-NEXT:    addk r3, r5, r0
@@ -54,8 +54,8 @@ define i32 @loop_phi(i32 %n) {
 ; CHECK-NEXT:  .LBB2_1: # %loop
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    addik r3, r3, 1
-; CHECK-NEXT:    cmp r4, r3, r5
-; CHECK-NEXT:    bgtid r4, .LBB2_1
+; CHECK-NEXT:    cmp r4, r5, r3
+; CHECK-NEXT:    bltid r4, .LBB2_1
 ; CHECK-NEXT:    nop
 ; CHECK-NEXT:  .LBB2_2: # %done
 ; CHECK-NEXT:    rtsd r15, 8

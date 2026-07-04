@@ -255,13 +255,18 @@ bool DelaySlotFiller::searchBackward(
     if (MI.hasUnmodeledSideEffects() || MI.isInlineAsm() || MI.isPseudo())
       return false;
 
-    // Multi-word / IMM-prefixed instructions cannot occupy a single slot.
-    if (needsMultiWordEncoding(MI))
-      goto next;
-
     CandDefs.reset();
     CandUses.reset();
     collectRegs(MI, TRI, CandDefs, CandUses);
+
+    // Multi-word / IMM-prefixed instructions cannot occupy a single slot.
+    // Collect registers first so DefsAfter/UsesAfter track this instruction's
+    // defs even though it cannot itself be a candidate — without this, a later
+    // (earlier in execution order) instruction that reads a register written by
+    // the skipped multi-word instruction would incorrectly pass the hazard
+    // checks and be placed in the delay slot with the wrong register value.
+    if (needsMultiWordEncoding(MI))
+      goto next;
 
     // Stores cannot be candidates (side effects), but do not end the scan.
     // Record the store's memory target so load candidates can be alias-checked.

@@ -27,7 +27,7 @@
 ; REQUIRES: microblaze-registered-target
 define void @countdown(ptr %p, i32 %n) {
 ; CHECK-LABEL: countdown:
-; CHECK:       cmp [[C:r[0-9]+]], {{r[0-9]+}}, {{r[0-9]+}}
+; CHECK:       rsubk [[C:r[0-9]+]], {{r[0-9]+}}, {{r[0-9]+}}
 ;
 ; Default / area (no usable cache): keep the D-form back-edge branch + NOP.
 ; NOBTC-NEXT:  bneid [[C]], .LBB0_1

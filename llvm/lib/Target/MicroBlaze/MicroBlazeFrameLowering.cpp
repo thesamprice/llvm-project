@@ -47,33 +47,23 @@ using namespace llvm;
 // MicroBlaze.h and defined in MicroBlazeRegisterInfo.cpp.
 
 // Emit "R1 = R1 + Amount" where Amount may not fit in a 16-bit immediate.
-// For small amounts: ADDIK r1, r1, Amount
-// For large amounts: IMM upper16; ADDIK r1, r1, lower16
-// The IMM+ADDIK pair assembles to (upper16 << 16) | (lower16 & 0xFFFF) which
-// the hardware interprets as a signed 32-bit value (UG984 §5 Type-B encoding).
+// Emits a single ADDIK with the full Amount; the MCCodeEmitter auto-emits an
+// IMM prefix when Amount is out of the signed 16-bit range (UG984 §5).
+//
+// Keeping the full Amount in the MachineInstr is critical for delay-slot
+// safety: the filler's needsMultiWordEncoding() sees |Amount| > 32767 and
+// refuses to hoist the instruction into a delay slot.  If we pre-split into
+// an explicit IMM + lo16 ADDIK at MachineIR level, the filler sees only the
+// small lo16 and hoists the ADDIK into e.g. an rtsd delay slot, leaving the
+// orphaned IMM to corrupt rtsd's return address (hi16<<16|8 vs. 8).
 static void emitAddImmSP(MachineBasicBlock &MBB,
                          MachineBasicBlock::iterator MBBI, const DebugLoc &DL,
                          const TargetInstrInfo *TII, int64_t Amount,
                          MachineInstr::MIFlag Flag) {
-  if (isInt<16>(Amount)) {
-    BuildMI(MBB, MBBI, DL, TII->get(MicroBlaze::ADDIK), MicroBlaze::R1)
-        .addReg(MicroBlaze::R1)
-        .addImm(Amount)
-        .setMIFlag(Flag);
-  } else {
-    // Split into upper 16 bits (for IMM) and lower 16 bits (for ADDIK).
-    // Cast via uint64_t to avoid UB on right-shift of negative int64_t.
-    uint64_t uval = (uint64_t)(int64_t)Amount;
-    int16_t upper16 = (int16_t)((uval >> 16) & 0xFFFF);
-    int16_t lower16 = (int16_t)(uval & 0xFFFF);
-    BuildMI(MBB, MBBI, DL, TII->get(MicroBlaze::IMM))
-        .addImm(upper16)
-        .setMIFlag(Flag);
-    BuildMI(MBB, MBBI, DL, TII->get(MicroBlaze::ADDIK), MicroBlaze::R1)
-        .addReg(MicroBlaze::R1)
-        .addImm(lower16)
-        .setMIFlag(Flag);
-  }
+  BuildMI(MBB, MBBI, DL, TII->get(MicroBlaze::ADDIK), MicroBlaze::R1)
+      .addReg(MicroBlaze::R1)
+      .addImm(Amount)
+      .setMIFlag(Flag);
 }
 
 MicroBlazeFrameLowering::MicroBlazeFrameLowering(const MicroBlazeSubtarget &STI)

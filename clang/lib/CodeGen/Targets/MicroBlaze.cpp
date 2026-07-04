@@ -42,6 +42,9 @@ public:
     for (auto &I : FI.arguments())
       I.info = classifyArgumentType(I.type);
   }
+
+  RValue EmitVAArg(CodeGenFunction &CGF, Address VAListAddr, QualType Ty,
+                   AggValueSlot Slot) const override;
 };
 } // end anonymous namespace
 
@@ -111,6 +114,19 @@ ABIArgInfo MicroBlazeABIInfo::classifyReturnType(QualType RetTy) const {
     return ABIArgInfo::getExtend(RetTy);
 
   return ABIArgInfo::getDirect();
+}
+
+RValue MicroBlazeABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
+                                    QualType Ty, AggValueSlot Slot) const {
+  // MicroBlaze passes all arguments (including aggregates) by value in 4-byte
+  // slots.  va_arg must load the value directly from the slot — never via a
+  // pointer — so IsIndirect=false always.
+  TypeInfoChars TI = getContext().getTypeInfoInChars(Ty);
+  // Slots are 4-byte aligned; round up size to a multiple of 4.
+  TI.Align = std::max(TI.Align, CharUnits::fromQuantity(4));
+  return emitVoidPtrVAArg(CGF, VAListAddr, Ty, /*IsIndirect=*/false,
+                          TI, CharUnits::fromQuantity(4),
+                          /*AllowHigherAlign=*/false, Slot);
 }
 
 namespace {

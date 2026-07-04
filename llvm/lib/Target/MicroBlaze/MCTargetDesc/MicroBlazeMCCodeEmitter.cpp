@@ -150,26 +150,22 @@ bool MicroBlazeMCCodeEmitter::needsIMMPrefix(const MCInst &MI,
   const MCInstrDesc &Desc = MCII.get(MI.getOpcode());
   IsPCRel = false;
 
-  // Only Type B instructions (those with an imm16 field) can have an IMM
-  // prefix. We identify them by the presence of an OPERAND_IMMEDIATE or
-  // OPERAND_PCREL operand in the instruction definition.
+  // All MicroBlaze immediate fields are 16-bit; any value that doesn't fit
+  // in a signed 16-bit range requires an IMM prefix.  Check every operand
+  // regardless of its declared OperandType so that composite memri operands
+  // (OperandType == OPERAND_UNKNOWN) are handled correctly when
+  // eliminateFrameIndex leaves a full 32-bit frame offset in the instruction
+  // rather than splitting it into an explicit IMM MachineInstr + lo16.
   for (unsigned i = 0, e = MI.getNumOperands(); i < e; ++i) {
     const MCOperandInfo &OpInfo = Desc.operands()[i];
     if (OpInfo.OperandType == MCOI::OPERAND_PCREL)
       IsPCRel = true;
 
-    if (OpInfo.OperandType != MCOI::OPERAND_IMMEDIATE &&
-        OpInfo.OperandType != MCOI::OPERAND_PCREL)
-      continue;
-
     const MCOperand &MO = MI.getOperand(i);
     if (MO.isExpr())
       return true; // Symbolic — always needs IMM prefix for 32-bit address.
-    if (MO.isImm()) {
-      int64_t V = MO.getImm();
-      if (!isInt<16>(V))
-        return true; // Large constant — doesn't fit in imm16.
-    }
+    if (MO.isImm() && !isInt<16>(MO.getImm()))
+      return true; // Large constant — doesn't fit in imm16.
   }
   return false;
 }
@@ -232,9 +228,9 @@ void MicroBlazeMCCodeEmitter::encodeInstruction(
       const MCOperandInfo &OpInfo = Desc.operands()[i];
       if (OpInfo.OperandType == MCOI::OPERAND_PCREL)
         IsPCRel = true;
-      if (OpInfo.OperandType != MCOI::OPERAND_IMMEDIATE &&
-          OpInfo.OperandType != MCOI::OPERAND_PCREL)
-        continue;
+      // Check all operand types — OPERAND_UNKNOWN composites (e.g., memri
+      // offsets) must also trigger an IMM prefix when their value is large.
+      // Register operands are silently skipped via the isImm()/isExpr() checks.
       const MCOperand &MO = MI.getOperand(i);
       if (MO.isExpr()) {
         SymExpr = MO.getExpr();

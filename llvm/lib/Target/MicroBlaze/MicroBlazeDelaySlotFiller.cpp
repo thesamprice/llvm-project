@@ -418,6 +418,13 @@ public:
 
 protected:
   bool needsMultiWordEncoding(const MachineInstr &MI) const override {
+    // The IMM instruction itself is also forbidden in delay slots (UG984 §2):
+    // it sets the IMM latch that modifies the NEXT instruction's immediate, so
+    // placing IMM in a delay slot leaks the latch into the first instruction at
+    // the branch target.  needsImmPrefix() covers instructions that NEED a
+    // preceding IMM; this guard also blocks the IMM word itself.
+    if (MI.getOpcode() == MicroBlaze::IMM)
+      return true;
     return needsImmPrefix(MI);
   }
 

@@ -13,6 +13,7 @@
 #include "llvm/ADT/BitVector.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Support/ErrorHandling.h"
 
@@ -114,6 +115,12 @@ bool MicroBlazeRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   // bottom of the fixed-object area; add stack size to get SP-relative.
   int64_t Offset = MFI.getObjectOffset(FrameIndex) + MFI.getStackSize() +
                    MI.getOperand(FIOperandNum + 1).getImm() + SPAdj;
+
+  // Leave the full Offset in the instruction's immediate field even when it
+  // exceeds 16 bits.  The MCCodeEmitter detects the overflow and automatically
+  // emits an IMM prefix during encoding — keeping a single MachineInstr rather
+  // than an IMM+target pair prevents the post-RA instruction scheduler from
+  // reordering the pair and corrupting the IMM latch.
 
   // Replace the FrameIndex operand with R1 (stack pointer).
   MI.getOperand(FIOperandNum).ChangeToRegister(MicroBlaze::R1, /*isDef=*/false);

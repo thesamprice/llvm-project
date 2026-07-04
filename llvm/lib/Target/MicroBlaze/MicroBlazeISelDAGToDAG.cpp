@@ -249,23 +249,42 @@ static unsigned getBranchOpcodeForCC(ISD::CondCode CC) {
   }
 }
 
-// Map signed ISD condition codes to MicroBlaze branch opcodes for the CMP path.
-// CMP rD, rA, rB sets bit31=1 iff rA > rB signed; bits30:0 = rB - rA.
-// So rD > 0 when rA < rB, rD < 0 when rA > rB, rD == 0 when rA == rB.
+// Return true if the CMP operands must be swapped (LHS↔RHS) for this CC.
+// CMP rD, rA, rB computes rD = rB - rA with rD[31]=1 iff rA > rB (signed).
+// Edge case: when (rB - rA) == 0x80000000, the arithmetic bit31=1 but the
+// comparison flag wants bit31=0 (rA NOT > rB), so CMP clears it → rD=0.
+// For SETLT/SETGE this edge case produces an incorrect result; swapping the
+// operands (so rD = rA - rB = LHS - RHS) means the arithmetic bit31 and the
+// comparison flag always agree.
+// Note: SETEQ/SETNE do not use CMP at all (they use RSUBK), so this only
+// needs to return true for the inequality conditions.
+static bool cmpNeedsSwap(ISD::CondCode CC) {
+  return CC == ISD::SETLT || CC == ISD::SETGE;
+}
+
+// Same logic for CMPU: SETULT and SETUGE have the same edge-case issue.
+static bool cmpuNeedsSwap(ISD::CondCode CC) {
+  return CC == ISD::SETULT || CC == ISD::SETUGE;
+}
+
+// Branch opcode to use after the comparison instruction.
+// SETEQ/SETNE use RSUBK (not CMP): result = RHS-LHS, zero iff equal.
+// SETLT/SETGE use CMP with swapped operands → rD = LHS-RHS, rD[31]=1 iff LHS<RHS.
+// SETGT/SETLE use CMP with natural order → rD = RHS-LHS, rD[31]=1 iff LHS>RHS.
 static unsigned getCmpBranchOpcodeForCC(ISD::CondCode CC) {
   switch (CC) {
   case ISD::SETEQ:
     return MicroBlaze::BEQID;
   case ISD::SETNE:
     return MicroBlaze::BNEID;
-  case ISD::SETLT:
-    return MicroBlaze::BGTID;
-  case ISD::SETLE:
-    return MicroBlaze::BGEID;
-  case ISD::SETGT:
+  case ISD::SETLT:  // swapped: rD = LHS-RHS, rD[31]=1 iff LHS<RHS → fire when rD<0
     return MicroBlaze::BLTID;
-  case ISD::SETGE:
-    return MicroBlaze::BLEID;
+  case ISD::SETLE:  // natural: rD = RHS-LHS, fire when rD≥0 (RHS≥LHS)
+    return MicroBlaze::BGEID;
+  case ISD::SETGT:  // natural: rD = RHS-LHS, rD[31]=1 iff LHS>RHS → fire when rD<0
+    return MicroBlaze::BLTID;
+  case ISD::SETGE:  // swapped: rD = LHS-RHS, rD[31]=0 iff LHS≥RHS → fire when rD≥0
+    return MicroBlaze::BGEID;
   default:
     llvm_unreachable("Expected signed CC for CMP branch");
   }
@@ -309,8 +328,12 @@ void MicroBlazeDAGToDAGISel::Select(SDNode *Node) {
   }
 
   // Handle MicroBlazeISD::BR_CC_CMP: (chain, cc_const, LHS, RHS, dest_bb)
-  // CMP rD, LHS, RHS: bit31=1 iff LHS > RHS signed (overflow-safe).
-  // Use getCmpBranchOpcodeForCC (LT↔GT, LE↔GE swapped vs subtraction path).
+  // SETEQ/SETNE: use RSUBK (pure subtract, no comparison-bit overwrite).
+  //   CMP is wrong for equality because RHS-LHS=0x80000000 gives a false zero
+  //   when bit31(comparison) is also 0, e.g. feq(INT_MIN,0) returns T instead of F.
+  //   RSUBK(LHS,RHS) = RHS-LHS = 0 iff LHS==RHS for all 32-bit values.
+  // SETLT/SETGE: swap CMP operands so rD = LHS-RHS (avoids the same edge case).
+  // SETGT/SETLE: natural CMP order (rD = RHS-LHS).
   if (Node->getOpcode() == MicroBlazeISD::BR_CC_CMP) {
     SDLoc DL(Node);
     ISD::CondCode CC = static_cast<ISD::CondCode>(
@@ -319,8 +342,12 @@ void MicroBlazeDAGToDAGISel::Select(SDNode *Node) {
     SDValue RHS = Node->getOperand(3);
     SDValue Dest = Node->getOperand(4);
     SDValue Chain = Node->getOperand(0);
-    SDNode *CmpNode =
-        CurDAG->getMachineNode(MicroBlaze::CMP, DL, MVT::i32, {LHS, RHS});
+    bool UseRSub = (CC == ISD::SETEQ || CC == ISD::SETNE);
+    bool Swap = !UseRSub && cmpNeedsSwap(CC);
+    unsigned CmpOpc = UseRSub ? MicroBlaze::RSUBK : MicroBlaze::CMP;
+    SDNode *CmpNode = CurDAG->getMachineNode(CmpOpc, DL, MVT::i32,
+                                              {Swap ? RHS : LHS,
+                                               Swap ? LHS : RHS});
     SDValue CmpResult(CmpNode, 0);
     unsigned BrOp = getCmpBranchOpcodeForCC(CC);
     SDNode *Selected =
@@ -330,8 +357,9 @@ void MicroBlazeDAGToDAGISel::Select(SDNode *Node) {
   }
 
   // Handle MicroBlazeISD::BR_CC_CMPU: (chain, cc_const, LHS, RHS, dest_bb)
-  // Emit CMPU rtemp, LHS, RHS then branch using the CMPU-reversed opcode.
-  // CMPU sets bit31=1 iff LHS > RHS unsigned (UG984 §5 Fig 84).
+  // CMPU rD, rA, rB: rD = rB-rA, rD[31]=1 iff rA > rB (unsigned).
+  // SETULT/SETUGE: swap operands so rD = LHS-RHS (bit31=1 iff LHS<RHS unsigned),
+  // avoiding the same edge case as CMP with 0x80000000.
   if (Node->getOpcode() == MicroBlazeISD::BR_CC_CMPU) {
     SDLoc DL(Node);
     ISD::CondCode CC = static_cast<ISD::CondCode>(
@@ -341,22 +369,24 @@ void MicroBlazeDAGToDAGISel::Select(SDNode *Node) {
     SDValue Dest = Node->getOperand(4);
     SDValue Chain = Node->getOperand(0);
 
-    SDNode *CmpuNode =
-        CurDAG->getMachineNode(MicroBlaze::CMPU, DL, MVT::i32, {LHS, RHS});
+    bool Swap = cmpuNeedsSwap(CC);
+    SDNode *CmpuNode = CurDAG->getMachineNode(MicroBlaze::CMPU, DL, MVT::i32,
+                                               {Swap ? RHS : LHS,
+                                                Swap ? LHS : RHS});
     SDValue CmpuResult(CmpuNode, 0);
     unsigned BrOp;
     switch (CC) {
     case ISD::SETUGT:
-      BrOp = MicroBlaze::BLTID;
+      BrOp = MicroBlaze::BLTID;  // natural: rD[31]=1 iff LHS>RHS → rD<0
       break;
     case ISD::SETULT:
-      BrOp = MicroBlaze::BGTID;
+      BrOp = MicroBlaze::BLTID;  // swapped: rD = LHS-RHS, rD[31]=1 iff LHS<RHS
       break;
     case ISD::SETUGE:
-      BrOp = MicroBlaze::BLEID;
+      BrOp = MicroBlaze::BGEID;  // swapped: rD = LHS-RHS, rD[31]=0 iff LHS≥RHS
       break;
     case ISD::SETULE:
-      BrOp = MicroBlaze::BGEID;
+      BrOp = MicroBlaze::BGEID;  // natural: rD = RHS-LHS, rD≥0 iff LHS≤RHS
       break;
     default:
       llvm_unreachable("Expected unsigned inequality CC in BR_CC_CMPU");

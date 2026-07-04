@@ -34,8 +34,8 @@ define i32 @fcmp_select_lt(float %a, float %b, i32 %x, i32 %y) {
 ; SOFT-NEXT:    bralid r15, __ltsf2
 ; SOFT-NEXT:    addk r19, r7, r0
 ; SOFT-NEXT:    addik r4, r0, 0
-; SOFT-NEXT:    cmp r3, r3, r4
-; SOFT-NEXT:    bgtid r3, .LBB0_2
+; SOFT-NEXT:    cmp r3, r4, r3
+; SOFT-NEXT:    bltid r3, .LBB0_2
 ; SOFT-NEXT:    lwi r15, r1, 0
 ; SOFT-NEXT:  .LBB0_1:
 ; SOFT-NEXT:    addk r19, r22, r0
@@ -75,8 +75,8 @@ define i32 @fcmp_select_ult(float %a, float %b, i32 %x, i32 %y) {
 ; SOFT-NEXT:    bralid r15, __gesf2
 ; SOFT-NEXT:    addk r19, r7, r0
 ; SOFT-NEXT:    addik r4, r0, 0
-; SOFT-NEXT:    cmp r3, r3, r4
-; SOFT-NEXT:    bgtid r3, .LBB1_2
+; SOFT-NEXT:    cmp r3, r4, r3
+; SOFT-NEXT:    bltid r3, .LBB1_2
 ; SOFT-NEXT:    lwi r15, r1, 0
 ; SOFT-NEXT:  .LBB1_1:
 ; SOFT-NEXT:    addk r19, r22, r0
@@ -114,7 +114,7 @@ define i32 @fcmp_select_ord(float %a, float %b, i32 %x, i32 %y) {
 ; SOFT-NEXT:    bralid r15, __unordsf2
 ; SOFT-NEXT:    addk r19, r7, r0
 ; SOFT-NEXT:    addik r4, r0, 0
-; SOFT-NEXT:    cmp r3, r3, r4
+; SOFT-NEXT:    rsubk r3, r3, r4
 ; SOFT-NEXT:    beqid r3, .LBB2_2
 ; SOFT-NEXT:    lwi r15, r1, 0
 ; SOFT-NEXT:  .LBB2_1:
@@ -153,8 +153,8 @@ define float @fcmp_fselect_lt(float %a, float %b, float %x, float %y) {
 ; SOFT-NEXT:    bralid r15, __ltsf2
 ; SOFT-NEXT:    addk r19, r7, r0
 ; SOFT-NEXT:    addik r4, r0, 0
-; SOFT-NEXT:    cmp r3, r3, r4
-; SOFT-NEXT:    bgtid r3, .LBB3_2
+; SOFT-NEXT:    cmp r3, r4, r3
+; SOFT-NEXT:    bltid r3, .LBB3_2
 ; SOFT-NEXT:    lwi r15, r1, 0
 ; SOFT-NEXT:  .LBB3_1:
 ; SOFT-NEXT:    addk r19, r22, r0

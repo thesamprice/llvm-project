@@ -65,14 +65,14 @@ define internal fastcc void @qs(ptr noundef %0, ptr noundef %1) #0 {
 ; CHECK-NEXT:    swi r25, r1, 4
 ; CHECK-NEXT:    bri .LBB0_2
 ; CHECK-NEXT:  .LBB0_1: # in Loop: Header=BB0_2 Depth=1
-; CHECK-NEXT:    cmpu r3, r25, r19
-; CHECK-NEXT:    bleid r3, .LBB0_12
+; CHECK-NEXT:    cmpu r3, r19, r25
+; CHECK-NEXT:    bgeid r3, .LBB0_12
 ; CHECK-NEXT:    addk r24, r25, r0
 ; CHECK-NEXT:  .LBB0_2: # =>This Loop Header: Depth=1
 ; CHECK-NEXT:    # Child Loop BB0_5 Depth 2
 ; CHECK-NEXT:    # Child Loop BB0_7 Depth 3
-; CHECK-NEXT:    cmpu r3, r24, r19
-; CHECK-NEXT:    blei r3, .LBB0_12
+; CHECK-NEXT:    cmpu r3, r19, r24
+; CHECK-NEXT:    bgei r3, .LBB0_12
 ; CHECK-NEXT:  .LBB0_3: # in Loop: Header=BB0_2 Depth=1
 ; CHECK-NEXT:    rsubk r5, r24, r19
 ; CHECK-NEXT:    bralid r15, __ashrsi3
@@ -94,8 +94,8 @@ define internal fastcc void @qs(ptr noundef %0, ptr noundef %1) #0 {
 ; CHECK-NEXT:    # => This Loop Header: Depth=2
 ; CHECK-NEXT:    # Child Loop BB0_7 Depth 3
 ; CHECK-NEXT:    lwi r4, r25, 0
-; CHECK-NEXT:    cmp r5, r4, r3
-; CHECK-NEXT:    bgtid r5, .LBB0_5
+; CHECK-NEXT:    cmp r5, r3, r4
+; CHECK-NEXT:    bltid r5, .LBB0_5
 ; CHECK-NEXT:    addik r25, r25, 4
 ; CHECK-NEXT:  .LBB0_6: # %.preheader
 ; CHECK-NEXT:    # in Loop: Header=BB0_5 Depth=2

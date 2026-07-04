@@ -785,14 +785,28 @@ bool getFCmpOpcodes(ISD::CondCode CC, unsigned &Opc1, unsigned &Opc2,
 }
 } // namespace llvm
 
-// Branch opcodes for CMP-based signed comparisons (UG984 §5).
-// CMP rD, rA, rB sets bit31=1 iff rA > rB signed; bits30:0 = rB - rA.
-// Because bit31=1 means rA>rB, the branch opcodes are swapped vs. the
-// subtraction (RSUBK) path where diff=LHS-RHS and LT fires when diff<0:
-//   SETLT: want fire when LHS<RHS → bit31=0, bits30:0>0 → result>0 → BGTID
-//   SETLE: want fire when LHS≤RHS → result≥0 → BGEID
-//   SETGT: want fire when LHS>RHS → bit31=1 → result<0 → BLTID
-//   SETGE: want fire when LHS≥RHS → result≤0 → BLEID
+// Return true if CMP operands need to be swapped (emitting CMP rd, RHS, LHS
+// instead of CMP rd, LHS, RHS) for this condition code.
+// CMP rD, rA, rB: rD = rB - rA, rD[31]=1 iff rA > rB signed.
+// Edge case: when rB-rA = 0x80000000, arithmetic bit31=1 but the comparison
+// flag wants bit31=0, so CMP zeroes it → rD=0 → wrong branch.
+// Swapping so rD = rA - rA = LHS - RHS ensures the arithmetic and comparison
+// bit31 always agree for SETLT/SETGE.
+static bool mbCmpNeedsSwap(ISD::CondCode CC) {
+  return CC == ISD::SETLT || CC == ISD::SETGE;
+}
+
+static bool mbCmpuNeedsSwap(ISD::CondCode CC) {
+  return CC == ISD::SETULT || CC == ISD::SETUGE;
+}
+
+// Branch opcode after CMP (with swapped operands for SETLT/SETGE).
+// SETLT/SETGE (swapped): rD = LHS-RHS, rD[31]=1 iff LHS<RHS.
+//   SETLT → fire when rD<0 → BLTID
+//   SETGE → fire when rD≥0 → BGEID
+// SETGT/SETLE (natural): rD = RHS-LHS, rD[31]=1 iff LHS>RHS.
+//   SETGT → fire when rD<0 → BLTID
+//   SETLE → fire when rD≥0 → BGEID
 static unsigned getMBCmpBranchOpcodeForCC(ISD::CondCode CC) {
   switch (CC) {
   case ISD::SETEQ:
@@ -800,30 +814,31 @@ static unsigned getMBCmpBranchOpcodeForCC(ISD::CondCode CC) {
   case ISD::SETNE:
     return MicroBlaze::BNEID;
   case ISD::SETLT:
-    return MicroBlaze::BGTID;
+    return MicroBlaze::BLTID;
   case ISD::SETLE:
     return MicroBlaze::BGEID;
   case ISD::SETGT:
     return MicroBlaze::BLTID;
   case ISD::SETGE:
-    return MicroBlaze::BLEID;
+    return MicroBlaze::BGEID;
   default:
     llvm_unreachable("Expected signed CC for CMP branch");
   }
 }
 
-// Branch opcodes for CMPU-based unsigned comparisons (UG984 §5 Fig 84).
-// CMPU rD, rA, rB sets bit31=1 iff rA > rB unsigned; bits30:0 = rB - rA.
-// Same structural rule as CMP: bit31=1 when rA>rB, so opcodes are swapped
-// vs. the subtraction path.
+// Branch opcode after CMPU (with swapped operands for SETULT/SETUGE).
+// SETULT/SETUGE (swapped): rD = LHS-RHS, rD[31]=1 iff LHS<RHS unsigned.
+//   SETULT → BLTID;  SETUGE → BGEID
+// SETUGT/SETULE (natural): rD = RHS-LHS, rD[31]=1 iff LHS>RHS unsigned.
+//   SETUGT → BLTID;  SETULE → BGEID
 static unsigned getMBCmpuBranchOpcodeForCC(ISD::CondCode CC) {
   switch (CC) {
   case ISD::SETUGT:
     return MicroBlaze::BLTID;
   case ISD::SETULT:
-    return MicroBlaze::BGTID;
+    return MicroBlaze::BLTID;
   case ISD::SETUGE:
-    return MicroBlaze::BLEID;
+    return MicroBlaze::BGEID;
   case ISD::SETULE:
     return MicroBlaze::BGEID;
   default:
@@ -1025,13 +1040,19 @@ MachineBasicBlock *MicroBlazeTargetLowering::EmitInstrWithCustomInserter(
   Register RHSReg = MI.getOperand(5).getReg();
 
   if (MI.getOpcode() == MicroBlaze::SELECT_CC_CMP_PSEUDO) {
-    // CMP rD, LHS, RHS: bit31 = 1 iff LHS > RHS signed; use CMP-specific
-    // opcodes.
+    // SETEQ/SETNE: use RSUBK instead of CMP to avoid the false-zero edge case.
+    //   CMP rD, LHS, RHS gives rD=0 when RHS-LHS=0x80000000 and LHS≤RHS (signed),
+    //   e.g. LHS=INT_MIN, RHS=0 → rD=0 but they're not equal. RSUBK has no
+    //   comparison-bit overwrite, so RSUBK(LHS,RHS)=0 iff LHS==RHS exactly.
+    // SETLT/SETGE: swap CMP operands so rD = LHS-RHS (avoids the same edge case).
+    bool UseRSub = (CC == ISD::SETEQ || CC == ISD::SETNE);
+    bool Swap = !UseRSub && mbCmpNeedsSwap(CC);
+    unsigned CmpOpc = UseRSub ? MicroBlaze::RSUBK : MicroBlaze::CMP;
     Register CmpReg =
         MF->getRegInfo().createVirtualRegister(&MicroBlaze::GPRRegClass);
-    BuildMI(*BB, MI, DL, TII.get(MicroBlaze::CMP), CmpReg)
-        .addReg(LHSReg)
-        .addReg(RHSReg);
+    BuildMI(*BB, MI, DL, TII.get(CmpOpc), CmpReg)
+        .addReg(Swap ? RHSReg : LHSReg)
+        .addReg(Swap ? LHSReg : RHSReg);
     return emitSelectCCDiamond(MI, BB, getMBCmpBranchOpcodeForCC(CC), CmpReg,
                                MI.getOperand(0).getReg(),
                                MI.getOperand(1).getReg(),
@@ -1040,13 +1061,14 @@ MachineBasicBlock *MicroBlazeTargetLowering::EmitInstrWithCustomInserter(
 
   assert(MI.getOpcode() == MicroBlaze::SELECT_CC_CMPU_PSEUDO &&
          "Unknown custom-inserter pseudo");
-  // CMPU rD, LHS, RHS: bit31 = 1 iff LHS > RHS unsigned; branch opcodes
-  // reversed.
+  // SETULT/SETUGE: swap operands so CMPU computes LHS-RHS (avoids the same
+  // 0x80000000 edge case as CMP).
+  bool SwapU = mbCmpuNeedsSwap(CC);
   Register CmpuReg =
       MF->getRegInfo().createVirtualRegister(&MicroBlaze::GPRRegClass);
   BuildMI(*BB, MI, DL, TII.get(MicroBlaze::CMPU), CmpuReg)
-      .addReg(LHSReg)
-      .addReg(RHSReg);
+      .addReg(SwapU ? RHSReg : LHSReg)
+      .addReg(SwapU ? LHSReg : RHSReg);
   return emitSelectCCDiamond(MI, BB, getMBCmpuBranchOpcodeForCC(CC), CmpuReg,
                              MI.getOperand(0).getReg(),
                              MI.getOperand(1).getReg(),
