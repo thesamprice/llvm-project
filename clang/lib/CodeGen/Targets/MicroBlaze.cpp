@@ -73,7 +73,19 @@ ABIArgInfo MicroBlazeABIInfo::classifyArgumentType(QualType Ty) const {
     // Pass aggregate by value as an array of 32-bit words so each word is
     // independently assigned to a register (R5–R10) or stack slot by the
     // calling-convention machine — matching GCC's MicroBlaze ABI.
+    //
+    // For very large aggregates, the [N x i32] coerce type creates an IR
+    // function type with N arguments.  SelectionDAG's DAGCombiner passes are
+    // O(N²) in the number of call-argument nodes, so structs much larger than
+    // a few KB push compile time into tens of seconds (>30 s for the 64 KB
+    // struct in GCC torture test pr20621-1).  Structs above 8 KiB are passed
+    // indirectly (byval copy) instead.  This deviates from GCC's ABI for
+    // unusually large by-value structs, but such sizes are rare in practice on
+    // this bare-metal target and the compile-time cost is prohibitive.
     uint64_t ByteSize = getContext().getTypeSize(Ty) / 8;
+    if (ByteSize > 8192)
+      return getNaturalAlignIndirect(Ty, getDataLayout().getAllocaAddrSpace(),
+                                     /*ByVal=*/true);
     uint64_t NumWords = (ByteSize + 3) / 4;
     llvm::Type *Int32Ty = llvm::Type::getInt32Ty(getVMContext());
     llvm::Type *CoerceTy = llvm::ArrayType::get(Int32Ty, NumWords);
