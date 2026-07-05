@@ -62,6 +62,16 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   setMaxAtomicSizeInBitsSupported(32);
   setMinCmpXchgSizeInBits(32);
 
+  // Simple atomic loads/stores (from <stdatomic.h> atomic_load_explicit /
+  // atomic_store_explicit) arrive as ISD::ATOMIC_LOAD / ATOMIC_STORE DAG nodes.
+  // Expand converts these to ATOMIC_CMP_SWAP / ATOMIC_SWAP respectively (no
+  // libcall exists), which MicroBlaze cannot select.  Use Custom lowering to
+  // emit plain loads/stores — correct for bare-metal single-threaded.
+  for (MVT VT : {MVT::i8, MVT::i16, MVT::i32}) {
+    setOperationAction(ISD::ATOMIC_LOAD,  VT, Custom);
+    setOperationAction(ISD::ATOMIC_STORE, VT, Custom);
+  }
+
   // Carry-chain operations for i64 arithmetic.  MSR_C is modeled as a
   // physical carry register (like ARM's CPSR) so the carry flows directly
   // between ADD/ADDC and RSUB/RSUBC without any GPR round-trip.
@@ -644,6 +654,10 @@ SDValue MicroBlazeTargetLowering::LowerOperation(SDValue Op,
     return LowerVAARG(Op, DAG);
   case ISD::ATOMIC_FENCE:
     return LowerATOMIC_FENCE(Op, DAG);
+  case ISD::ATOMIC_LOAD:
+    return LowerATOMIC_LOAD(Op, DAG);
+  case ISD::ATOMIC_STORE:
+    return LowerATOMIC_STORE(Op, DAG);
   case ISD::LOAD:
     return LowerFP32Load(Op, DAG);
   case ISD::STORE:
@@ -1167,6 +1181,41 @@ SDValue MicroBlazeTargetLowering::LowerATOMIC_FENCE(SDValue Op,
   SDValue Imm = DAG.getTargetConstant(1, DL, MVT::i32);
   return SDValue(
       DAG.getMachineNode(MicroBlaze::MBAR, DL, MVT::Other, {Imm, Chain}), 0);
+}
+
+// Lower ISD::ATOMIC_LOAD → a plain load.
+// The generic legalizer would expand ATOMIC_LOAD to ATOMIC_CMP_SWAP (a fake
+// CAS used to implement an atomic read), which MicroBlaze cannot select.  For
+// single-threaded bare-metal, any ordinary load satisfies atomic semantics.
+SDValue MicroBlazeTargetLowering::LowerATOMIC_LOAD(SDValue Op,
+                                                    SelectionDAG &DAG) const {
+  auto *AN = cast<AtomicSDNode>(Op.getNode());
+  SDLoc DL(Op);
+  EVT VT = Op.getValueType();
+  EVT MemVT = AN->getMemoryVT();
+  ISD::LoadExtType Ext = VT == MemVT ? ISD::NON_EXTLOAD : ISD::ZEXTLOAD;
+  SDValue Load =
+      DAG.getExtLoad(Ext, DL, VT, AN->getChain(), AN->getBasePtr(),
+                     MachinePointerInfo(), MemVT, AN->getAlign(),
+                     MachineMemOperand::MOVolatile);
+  return DAG.getMergeValues({Load, Load.getValue(1)}, DL);
+}
+
+// Lower ISD::ATOMIC_STORE → a plain store.
+// The generic legalizer expands ATOMIC_STORE to ATOMIC_SWAP (to implement the
+// store atomically), which MicroBlaze cannot select.  For bare-metal, a
+// plain (possibly volatile) store has the same semantics.
+SDValue MicroBlazeTargetLowering::LowerATOMIC_STORE(SDValue Op,
+                                                     SelectionDAG &DAG) const {
+  auto *AN = cast<AtomicSDNode>(Op.getNode());
+  SDLoc DL(Op);
+  EVT MemVT = AN->getMemoryVT();
+  SDValue Val = AN->getVal();
+  if (Val.getValueType() != MemVT)
+    Val = DAG.getNode(ISD::TRUNCATE, DL, MemVT, Val);
+  return DAG.getStore(AN->getChain(), DL, Val, AN->getBasePtr(),
+                      MachinePointerInfo(), AN->getAlign(),
+                      MachineMemOperand::MOVolatile);
 }
 
 //===----------------------------------------------------------------------===//

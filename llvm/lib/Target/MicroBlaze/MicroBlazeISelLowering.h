@@ -121,6 +121,8 @@ public:
   getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
                                StringRef Constraint, MVT VT) const override;
 
+  ConstraintType getConstraintType(StringRef Constraint) const override;
+
   // Atomic LL/SC expansion via LWX/SWX hardware instructions.
   // AtomicExpandPass calls these at IR level to build the LL/SC retry loop.
   AtomicExpansionKind
@@ -156,6 +158,8 @@ private:
   SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerSETCC(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerATOMIC_FENCE(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerATOMIC_LOAD(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerATOMIC_STORE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerShift(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) const;
