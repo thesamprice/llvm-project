@@ -142,14 +142,19 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   // (idiv is 34 cycles; mulh is 3 cycles — always prefer magic for constants).
   // Without +multiply-high, Expand all high-multiply ops so constant division
   // falls through to __divsi3/__modsi3 libcalls.
+  //
+  // SMUL_LOHI/UMUL_LOHI must always be Expand: when +multiply-high is active
+  // the SelectionDAGLegalize expander splits them into MUL (low) + MULHS/MULHU
+  // (high); without it they fall to libcalls.  Without this unconditional
+  // Expand the ops default to Legal and ISel crashes with "Cannot select".
+  setOperationAction(ISD::SMUL_LOHI, MVT::i32, Expand);
+  setOperationAction(ISD::UMUL_LOHI, MVT::i32, Expand);
   if (STI.hasMultiplyHigh()) {
     setOperationAction(ISD::MULHS, MVT::i32, Legal);
     setOperationAction(ISD::MULHU, MVT::i32, Legal);
   } else {
     setOperationAction(ISD::MULHS, MVT::i32, Expand);
     setOperationAction(ISD::MULHU, MVT::i32, Expand);
-    setOperationAction(ISD::SMUL_LOHI, MVT::i32, Expand);
-    setOperationAction(ISD::UMUL_LOHI, MVT::i32, Expand);
   }
 
   // _Bool is stored as a byte; promote i1 ext-loads to i8 so the existing
@@ -486,6 +491,17 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   // which in turn requires saving a frame chain; unsupported.
   setOperationAction(ISD::FRAMEADDR,  MVT::i32, Custom);
   setOperationAction(ISD::RETURNADDR, MVT::i32, Custom);
+
+  // STACKSAVE/STACKRESTORE: expand to copies of R1 (the stack pointer).
+  // The generic SelectionDAGLegalizer expansion uses the register registered
+  // by setStackPointerRegisterToSaveRestore() above.  Without this Expand
+  // annotation the ops default to Legal and ISel crashes with "Cannot select".
+  setOperationAction(ISD::STACKSAVE,    MVT::Other, Expand);
+  setOperationAction(ISD::STACKRESTORE, MVT::Other, Expand);
+  // DYNAMIC_STACKALLOC: used for VLAs where the size is a runtime value.
+  // The generic ExpandDYNAMIC_STACKALLOC in SelectionDAGLegalize subtracts
+  // the (rounded) size from R1 and returns the new SP as the allocation base.
+  setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i32,  Expand);
 
   setMinFunctionAlignment(Align(4));
 }
