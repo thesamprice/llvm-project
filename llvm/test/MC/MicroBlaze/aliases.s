@@ -30,13 +30,14 @@
 
 # Power management aliases
 # hibernate  →  mbar 8
-# CHECK: mbar 8                       # encoding: [0x08,0x00,0x40,0xb8]
+# MBAR encoding: [31:26]=0x2E [25:21]=sel [20:16]=0b00010(fixed) [15:0]=0x0004(fixed)
+# CHECK: mbar 8                       # encoding: [0x04,0x00,0x02,0xb9]
   hibernate
 
 # sleep  →  mbar 16
-# CHECK: mbar 16                      # encoding: [0x10,0x00,0x40,0xb8]
+# CHECK: mbar 16                      # encoding: [0x04,0x00,0x02,0xba]
   sleep
 
 # suspend  →  mbar 24
-# CHECK: mbar 24                      # encoding: [0x18,0x00,0x40,0xb8]
+# CHECK: mbar 24                      # encoding: [0x04,0x00,0x02,0xbb]
   suspend
