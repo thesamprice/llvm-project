@@ -67,10 +67,20 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   // Expand converts these to ATOMIC_CMP_SWAP / ATOMIC_SWAP respectively (no
   // libcall exists), which MicroBlaze cannot select.  Use Custom lowering to
   // emit plain loads/stores — correct for bare-metal single-threaded.
-  for (MVT VT : {MVT::i8, MVT::i16, MVT::i32}) {
-    setOperationAction(ISD::ATOMIC_LOAD,  VT, Custom);
+  //
+  // ATOMIC_STORE: Custom for i8/i16/i32.  ATOMIC_STORE has no integer result
+  // (chain only), so the type legalizer never calls PromoteIntegerResult on it;
+  // the op legalizer keys on MemVT and calls LowerATOMIC_STORE directly.
+  for (MVT VT : {MVT::i8, MVT::i16, MVT::i32})
     setOperationAction(ISD::ATOMIC_STORE, VT, Custom);
-  }
+  //
+  // ATOMIC_LOAD: Custom only for i32.  For i8/i16, setting Custom here would
+  // cause the type legalizer to call ReplaceNodeResults (unimplemented) during
+  // integer-result promotion, triggering an llvm_unreachable crash.  Without
+  // Custom, the type legalizer promotes ATOMIC_LOAD i8/i16 → ATOMIC_LOAD i32
+  // (with MemVT preserved as i8/i16), and the i32 Custom handler below emits
+  // the correct ZEXTLOAD.
+  setOperationAction(ISD::ATOMIC_LOAD, MVT::i32, Custom);
 
   // Carry-chain operations for i64 arithmetic.  MSR_C is modeled as a
   // physical carry register (like ARM's CPSR) so the carry flows directly
