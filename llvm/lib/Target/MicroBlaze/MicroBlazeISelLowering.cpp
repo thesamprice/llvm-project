@@ -593,21 +593,17 @@ SDValue MicroBlazeTargetLowering::LowerFRAMEADDR(SDValue Op,
   MachineFrameInfo &MFI = MF.getFrameInfo();
   MFI.setFrameAddressIsTaken(true);
 
-  unsigned Depth = Op.getConstantOperandVal(0);
-  if (Depth > 0)
-    // MicroBlaze has no dedicated frame-pointer register so walking the frame
-    // chain is not supported.  Callers that need depth > 0 must use a
-    // target with a saved-FP convention.
-    report_fatal_error(
-        "MicroBlaze: __builtin_frame_address with depth > 0 is not supported");
-
   EVT VT = Op.getValueType();
   SDLoc DL(Op);
-  // Without a dedicated frame pointer, R1 (the stack pointer) is the closest
-  // approximation.  It points to the bottom of the current frame immediately
-  // after the prologue, which is the frame base for leaf functions.
-  Register FP = Subtarget.getRegisterInfo()->getFrameRegister(MF);
-  return DAG.getCopyFromReg(DAG.getEntryNode(), DL, FP, VT);
+  unsigned Depth = Op.getConstantOperandVal(0);
+
+  // R19 is the frame pointer.  The prologue saves the parent FP at [FP+0], so
+  // walking Depth levels means loading [FP+0] Depth times.
+  SDValue FP =
+      DAG.getCopyFromReg(DAG.getEntryNode(), DL, MicroBlaze::R19, VT);
+  for (unsigned d = 0; d < Depth; d++)
+    FP = DAG.getLoad(VT, DL, DAG.getEntryNode(), FP, MachinePointerInfo());
+  return FP;
 }
 
 SDValue MicroBlazeTargetLowering::LowerRETURNADDR(SDValue Op,
