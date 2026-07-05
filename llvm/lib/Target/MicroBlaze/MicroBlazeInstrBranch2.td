@@ -172,3 +172,39 @@ def BLTI  : CBranchNID<0b00010, "blti">;   // LT
 def BLEI  : CBranchNID<0b00011, "blei">;   // LE
 def BGTI  : CBranchNID<0b00100, "bgti">;   // GT
 def BGEI  : CBranchNID<0b00101, "bgei">;   // GE
+
+//===----------------------------------------------------------------------===//
+// __builtin_setjmp / __builtin_longjmp pseudo instructions
+// Expanded by EmitInstrWithCustomInserter into a 4-MBB diamond.
+//
+// EH_SjLj_SetJmp: saves FP→buf[0], resumes_addr→buf[1], SP→buf[2]; returns 0/1.
+// EH_SjLj_LongJmp: loads FP←buf[0], SP←buf[2], jumps to buf[1].
+//===----------------------------------------------------------------------===//
+
+// SDTypeProfile counts only non-chain types; chain I/O is implicit via SDNPHasChain.
+// EH_SJLJ_SETJMP(chain, buf_ptr) → (i32, chain, glue): 1 output, 1 input.
+// EH_SJLJ_LONGJMP(chain, buf_ptr) → chain: 0 outputs, 1 input.
+def SDT_MBSjLjSetJmp  : SDTypeProfile<1, 1,
+    [SDTCisVT<0, i32>, SDTCisPtrTy<1>]>;
+def SDT_MBSjLjLongJmp : SDTypeProfile<0, 1,
+    [SDTCisPtrTy<0>]>;
+
+def MBSjLjSetJmp  : SDNode<"MicroBlazeISD::EH_SJLJ_SETJMP",
+    SDT_MBSjLjSetJmp, [SDNPHasChain, SDNPSideEffect, SDNPOutGlue]>;
+def MBSjLjLongJmp : SDNode<"MicroBlazeISD::EH_SJLJ_LONGJMP",
+    SDT_MBSjLjLongJmp, [SDNPHasChain, SDNPSideEffect]>;
+
+let hasSideEffects = 1, isCodeGenOnly = 1, usesCustomInserter = 1 in {
+  def EH_SjLj_SetJmp  : MBPseudo<
+      (outs GPR:$dst),
+      (ins GPR:$buf),
+      "# EH_SJLJ_SETJMP $dst, $buf",
+      [(set i32:$dst, (MBSjLjSetJmp iPTR:$buf))]>;
+
+  let isTerminator = 1, isBarrier = 1 in
+  def EH_SjLj_LongJmp : MBPseudo<
+      (outs),
+      (ins GPR:$buf),
+      "# EH_SJLJ_LONGJMP $buf",
+      [(MBSjLjLongJmp iPTR:$buf)]>;
+}

@@ -84,6 +84,11 @@ public:
   bool allowsLargerPreferedTypeAlignment() const override { return false; }
 
   bool hasBitIntType() const override { return true; }
+
+  // Enable __builtin_setjmp / __builtin_longjmp via the EH_SJLJ lowering path.
+  // The backend expands EH_SjLj_SetJmp / EH_SjLj_LongJmp pseudos in
+  // EmitInstrWithCustomInserter (MicroBlazeISelLowering.cpp).
+  bool hasSjLjLowering() const override { return true; }
 };
 
 } // namespace targets

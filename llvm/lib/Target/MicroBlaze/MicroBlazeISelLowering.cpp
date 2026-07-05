@@ -27,6 +27,7 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/Support/BranchProbability.h"
 
 using namespace llvm;
 
@@ -507,10 +508,15 @@ MicroBlazeTargetLowering::MicroBlazeTargetLowering(
   // __builtin_frame_address / __builtin_return_address.
   // MicroBlaze has no dedicated frame-pointer register, so FRAMEADDR returns
   // R1 (the stack pointer) for depth 0.  RETURNADDR reads R15 (the hardware
-  // link register) at function entry.  Depth > 0 requires stack walking,
-  // which in turn requires saving a frame chain; unsupported.
+  // link register) at function entry.  Depth > 0 walks the FP-chain saved by
+  // the prologue ([FP+0]=parent_FP, [FP+4]=parent_RA).
   setOperationAction(ISD::FRAMEADDR,  MVT::i32, Custom);
   setOperationAction(ISD::RETURNADDR, MVT::i32, Custom);
+
+  // __builtin_setjmp / __builtin_longjmp: expanded by EmitInstrWithCustomInserter
+  // using EH_SjLj_SetJmp and EH_SjLj_LongJmp pseudo instructions.
+  setOperationAction(ISD::EH_SJLJ_SETJMP,  MVT::i32,   Custom);
+  setOperationAction(ISD::EH_SJLJ_LONGJMP, MVT::Other, Custom);
 
   // STACKSAVE/STACKRESTORE: expand to copies of R1 (the stack pointer).
   // The generic SelectionDAGLegalizer expansion uses the register registered
@@ -579,6 +585,10 @@ const char *MicroBlazeTargetLowering::getTargetNodeName(unsigned Opcode) const {
     return "MicroBlazeISD::SUBE";
   case MicroBlazeISD::ABS:
     return "MicroBlazeISD::ABS";
+  case MicroBlazeISD::EH_SJLJ_SETJMP:
+    return "MicroBlazeISD::EH_SJLJ_SETJMP";
+  case MicroBlazeISD::EH_SJLJ_LONGJMP:
+    return "MicroBlazeISD::EH_SJLJ_LONGJMP";
   }
   return nullptr;
 }
@@ -614,19 +624,49 @@ SDValue MicroBlazeTargetLowering::LowerRETURNADDR(SDValue Op,
 
   EVT VT = Op.getValueType();
   SDLoc DL(Op);
-
   unsigned Depth = Op.getConstantOperandVal(0);
-  if (Depth > 0)
-    // MicroBlaze does not maintain a saved frame-pointer chain, so stack
-    // unwinding past the current frame is not possible.  Return null rather
-    // than aborting compilation; callers that check the result against null
-    // will handle this gracefully.
-    return DAG.getConstant(0, DL, VT);
 
-  // R15 is the hardware link register; it holds the return address at function
-  // entry.  Anchoring the copy to getEntryNode() captures the entry value
-  // before any calls inside the function overwrite R15.
-  return DAG.getCopyFromReg(DAG.getEntryNode(), DL, MicroBlaze::R15, VT);
+  if (Depth == 0)
+    // R15 holds the return address at function entry.  Anchor to getEntryNode()
+    // so the value is captured before any call inside the function overwrites R15.
+    return DAG.getCopyFromReg(DAG.getEntryNode(), DL, MicroBlaze::R15, VT);
+
+  // depth > 0: force FP-chain walk.  The prologue saves [parent_FP] at [FP+0]
+  // and the link register at [FP+4].  Walk Depth times through [FP+0], then
+  // load the RA from [resulting_FP + 4].
+  MFI.setFrameAddressIsTaken(true);
+  SDValue FP =
+      DAG.getCopyFromReg(DAG.getEntryNode(), DL, MicroBlaze::R19, VT);
+  for (unsigned d = 0; d < Depth; d++)
+    FP = DAG.getLoad(VT, DL, DAG.getEntryNode(), FP, MachinePointerInfo());
+  SDValue RAPtr =
+      DAG.getNode(ISD::ADD, DL, VT, FP, DAG.getIntPtrConstant(4, DL));
+  return DAG.getLoad(VT, DL, DAG.getEntryNode(), RAPtr, MachinePointerInfo());
+}
+
+//===----------------------------------------------------------------------===//
+// __builtin_setjmp / __builtin_longjmp lowering
+//===----------------------------------------------------------------------===//
+
+// LowerEH_SJLJ_SETJMP: convert ISD::EH_SJLJ_SETJMP → MicroBlazeISD::EH_SJLJ_SETJMP.
+// The target-specific node is selected to the EH_SjLj_SetJmp pseudo instruction
+// which is then expanded by EmitInstrWithCustomInserter.  The 4-MBB diamond
+// (ThisMBB → MainMBB / RestoreMBB → SinkMBB) stores the resume address into
+// buf[1] and returns 0 (initial call) or 1 (longjmp resume) via a PHI.
+SDValue MicroBlazeTargetLowering::LowerEH_SJLJ_SETJMP(SDValue Op,
+                                                        SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  return DAG.getNode(MicroBlazeISD::EH_SJLJ_SETJMP, DL,
+                     DAG.getVTList(MVT::i32, MVT::Other),
+                     Op.getOperand(0), Op.getOperand(1));
+}
+
+// LowerEH_SJLJ_LONGJMP: convert ISD::EH_SJLJ_LONGJMP → MicroBlazeISD::EH_SJLJ_LONGJMP.
+SDValue MicroBlazeTargetLowering::LowerEH_SJLJ_LONGJMP(SDValue Op,
+                                                         SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  return DAG.getNode(MicroBlazeISD::EH_SJLJ_LONGJMP, DL, MVT::Other,
+                     Op.getOperand(0), Op.getOperand(1));
 }
 
 //===----------------------------------------------------------------------===//
@@ -684,6 +724,10 @@ SDValue MicroBlazeTargetLowering::LowerOperation(SDValue Op,
     return LowerFRAMEADDR(Op, DAG);
   case ISD::RETURNADDR:
     return LowerRETURNADDR(Op, DAG);
+  case ISD::EH_SJLJ_SETJMP:
+    return LowerEH_SJLJ_SETJMP(Op, DAG);
+  case ISD::EH_SJLJ_LONGJMP:
+    return LowerEH_SJLJ_LONGJMP(Op, DAG);
   default:
     llvm_unreachable("Unexpected custom lowering");
   }
@@ -1019,6 +1063,140 @@ emitSelectCCDiamond(MachineInstr &MI, MachineBasicBlock *BB, unsigned BrOpc,
   return sinkMBB;
 }
 
+// emitEHSjLjSetJmp: expand EH_SjLj_SetJmp into a 4-MBB diamond.
+//
+// buf[0]=FP(R19), buf[1]=resume_addr, buf[2]=SP(R1).
+// Clang's __builtin_setjmp lowering already stores FP and SP into buf[0] and
+// buf[2] before calling EH_SJLJ_SETJMP.  We only need to store the resume
+// address into buf[1] and build the control-flow diamond.
+//
+//   ThisMBB:    addik tmp, R0, RestoreMBB   ; IMM+ADDIK → 32-bit resume address
+//               swi tmp, buf, 4             ; buf[1] = resume addr
+//               (fall through to MainMBB)
+//   MainMBB:    dst_0 = 0; bri SinkMBB
+//   RestoreMBB: dst_1 = 1 (longjmp jumps here via buf[1]; zero-prob CFG edge)
+//   SinkMBB:    dst = phi [0, MainMBB], [1, RestoreMBB]
+MachineBasicBlock *
+MicroBlazeTargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
+                                             MachineBasicBlock *BB) const {
+  DebugLoc DL = MI.getDebugLoc();
+  MachineFunction *MF = BB->getParent();
+  MachineRegisterInfo &MRI = MF->getRegInfo();
+  const TargetInstrInfo &TII = *MF->getSubtarget().getInstrInfo();
+  const BasicBlock *LLVM_BB = BB->getBasicBlock();
+
+  Register DstReg = MI.getOperand(0).getReg();
+  Register BufReg = MI.getOperand(1).getReg();
+
+  MachineFunction::iterator It = ++BB->getIterator();
+  MachineBasicBlock *ThisMBB    = BB;
+  MachineBasicBlock *MainMBB    = MF->CreateMachineBasicBlock(LLVM_BB);
+  MachineBasicBlock *RestoreMBB = MF->CreateMachineBasicBlock(LLVM_BB);
+  MachineBasicBlock *SinkMBB    = MF->CreateMachineBasicBlock(LLVM_BB);
+  MF->insert(It, MainMBB);
+  MF->insert(It, RestoreMBB);
+  MF->insert(It, SinkMBB);
+
+  // Transfer the tail of ThisMBB (after the pseudo) into SinkMBB.
+  SinkMBB->splice(SinkMBB->begin(), ThisMBB,
+                  std::next(MI.getIterator()), ThisMBB->end());
+  SinkMBB->transferSuccessorsAndUpdatePHIs(ThisMBB);
+
+  // RestoreMBB is a longjmp landing pad — mark it so the AsmPrinter emits its label.
+  RestoreMBB->setMachineBlockAddressTaken();
+
+  // ---- ThisMBB: store resume address into buf[1] ----
+  // Clang already stored FP→buf[0] and SP→buf[2] before this pseudo.
+  // Compute the address of RestoreMBB; MCCodeEmitter emits IMM+ADDIK for the ref.
+  Register AddrReg = MRI.createVirtualRegister(&MicroBlaze::GPRRegClass);
+  BuildMI(*ThisMBB, MI, DL, TII.get(MicroBlaze::ADDIK), AddrReg)
+      .addReg(MicroBlaze::R0)
+      .addMBB(RestoreMBB);
+  // buf[1] = resume address
+  BuildMI(*ThisMBB, MI, DL, TII.get(MicroBlaze::SWI))
+      .addReg(AddrReg, RegState::Kill)
+      .addReg(BufReg).addImm(4);
+  ThisMBB->addSuccessor(MainMBB);
+  // RestoreMBB has zero probability as a CFG successor of ThisMBB (longjmp
+  // jumps there directly).  Adding it prevents dead-block elimination.
+  ThisMBB->addSuccessor(RestoreMBB, BranchProbability::getZero());
+
+  // ---- MainMBB: dst = 0, jump to SinkMBB ----
+  Register ZeroReg = MRI.createVirtualRegister(&MicroBlaze::GPRRegClass);
+  BuildMI(*MainMBB, MainMBB->end(), DL, TII.get(MicroBlaze::ADDIK), ZeroReg)
+      .addReg(MicroBlaze::R0).addImm(0);
+  BuildMI(*MainMBB, MainMBB->end(), DL, TII.get(MicroBlaze::BRI))
+      .addMBB(SinkMBB);
+  MainMBB->addSuccessor(SinkMBB);
+
+  // ---- RestoreMBB: dst = 1, fall through to SinkMBB ----
+  Register OneReg = MRI.createVirtualRegister(&MicroBlaze::GPRRegClass);
+  BuildMI(*RestoreMBB, RestoreMBB->end(), DL, TII.get(MicroBlaze::ADDIK), OneReg)
+      .addReg(MicroBlaze::R0).addImm(1);
+  RestoreMBB->addSuccessor(SinkMBB);
+
+  // ---- SinkMBB: PHI selects between 0 (initial) and 1 (longjmp resume) ----
+  BuildMI(*SinkMBB, SinkMBB->begin(), DL, TII.get(TargetOpcode::PHI), DstReg)
+      .addReg(ZeroReg).addMBB(MainMBB)
+      .addReg(OneReg).addMBB(RestoreMBB);
+
+  MI.eraseFromParent();
+  return SinkMBB;
+}
+
+// emitEHSjLjLongJmp: expand EH_SjLj_LongJmp into register restores + indirect jump.
+//
+//   Load FP from buf[0] and SP from buf[2]; jump to buf[1] (resume address).
+//   All loads happen before physical register writes so BufReg remains valid.
+//
+//   lwi FPReg, buf, 0     ; load saved FP
+//   lwi IPReg, buf, 4     ; load resume address
+//   lwi SPReg, buf, 8     ; load saved SP
+//   or R19, R0, FPReg     ; restore frame pointer
+//   or R1,  R0, SPReg     ; restore stack pointer (must be last stack use)
+//   brad IPReg            ; jump to resume address (delay slot filled by DSF)
+MachineBasicBlock *
+MicroBlazeTargetLowering::emitEHSjLjLongJmp(MachineInstr &MI,
+                                              MachineBasicBlock *BB) const {
+  DebugLoc DL = MI.getDebugLoc();
+  MachineFunction *MF = BB->getParent();
+  MachineRegisterInfo &MRI = MF->getRegInfo();
+  const TargetInstrInfo &TII = *MF->getSubtarget().getInstrInfo();
+
+  Register BufReg = MI.getOperand(0).getReg();
+
+  // Load all values from buf before touching physical registers.
+  Register FPReg = MRI.createVirtualRegister(&MicroBlaze::GPRRegClass);
+  BuildMI(*BB, MI, DL, TII.get(MicroBlaze::LWI), FPReg)
+      .addReg(BufReg).addImm(0);
+
+  Register IPReg = MRI.createVirtualRegister(&MicroBlaze::GPRRegClass);
+  BuildMI(*BB, MI, DL, TII.get(MicroBlaze::LWI), IPReg)
+      .addReg(BufReg).addImm(4);
+
+  Register SPReg = MRI.createVirtualRegister(&MicroBlaze::GPRRegClass);
+  BuildMI(*BB, MI, DL, TII.get(MicroBlaze::LWI), SPReg)
+      .addReg(BufReg).addImm(8);
+
+  // Restore frame pointer (R19).
+  BuildMI(*BB, MI, DL, TII.get(MicroBlaze::OR_), MicroBlaze::R19)
+      .addReg(MicroBlaze::R0)
+      .addReg(FPReg, RegState::Kill);
+
+  // Restore stack pointer (R1) — after this point, stack-based accesses use the
+  // restored SP, so BufReg must not be a spilled virtual register past this point.
+  BuildMI(*BB, MI, DL, TII.get(MicroBlaze::OR_), MicroBlaze::R1)
+      .addReg(MicroBlaze::R0)
+      .addReg(SPReg, RegState::Kill);
+
+  // Jump to resume address (BRAD has a delay slot; DSF fills it with NOP if needed).
+  BuildMI(*BB, MI, DL, TII.get(MicroBlaze::BRAD))
+      .addReg(IPReg, RegState::Kill);
+
+  MI.eraseFromParent();
+  return BB;
+}
+
 // Expand SELECT_CC_PSEUDO / SELECT_CC_CMP_PSEUDO / SELECT_CC_CMPU_PSEUDO.
 //
 // SELECT_CC_PSEUDO operands:      dst(0) TrueV(1) FalseV(2) CC_imm(3) Diff(4)
@@ -1027,6 +1205,11 @@ emitSelectCCDiamond(MachineInstr &MI, MachineBasicBlock *BB, unsigned BrOpc,
 // LHS(4) RHS(5)
 MachineBasicBlock *MicroBlazeTargetLowering::EmitInstrWithCustomInserter(
     MachineInstr &MI, MachineBasicBlock *BB) const {
+  if (MI.getOpcode() == MicroBlaze::EH_SjLj_SetJmp)
+    return emitEHSjLjSetJmp(MI, BB);
+  if (MI.getOpcode() == MicroBlaze::EH_SjLj_LongJmp)
+    return emitEHSjLjLongJmp(MI, BB);
+
   // ABS_PSEUDO: abs(src) via a branch diamond.
   //
   //   headMBB:  BGTID src, sinkMBB   (delayed branch; delay slot filled by DSF)

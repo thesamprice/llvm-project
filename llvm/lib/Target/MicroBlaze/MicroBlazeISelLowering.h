@@ -93,6 +93,14 @@ enum NodeType : unsigned {
   // (≤0) path only; src > 0 skips it. Avoids the default SRA+XOR+SUB
   // 3-instruction arithmetic sequence.
   ABS,
+  // __builtin_setjmp / __builtin_longjmp lowering.
+  // EH_SJLJ_SETJMP: {i32 result, chain} = (chain, buf_ptr)
+  //   Expanded by EmitInstrWithCustomInserter into a 4-MBB diamond that saves
+  //   FP/SP/resume-address into buf[0]/buf[2]/buf[1] and returns 0 or 1 via PHI.
+  // EH_SJLJ_LONGJMP: chain = (chain, buf_ptr)
+  //   Restores FP/SP from buf[0]/buf[2] and jumps to buf[1].
+  EH_SJLJ_SETJMP,
+  EH_SJLJ_LONGJMP,
 };
 } // namespace MicroBlazeISD
 
@@ -173,6 +181,13 @@ private:
   SDValue LowerUSUBO(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerUADDO_CARRY(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerUSUBO_CARRY(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const;
+
+  MachineBasicBlock *emitEHSjLjSetJmp(MachineInstr &MI,
+                                       MachineBasicBlock *BB) const;
+  MachineBasicBlock *emitEHSjLjLongJmp(MachineInstr &MI,
+                                        MachineBasicBlock *BB) const;
 
   MachineBasicBlock *
   EmitInstrWithCustomInserter(MachineInstr &MI,
