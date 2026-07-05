@@ -94,6 +94,31 @@ bool MicroBlazeDAGToDAGISel::SelectADDRrr(SDValue Addr, SDValue &Base,
   return false;
 }
 
+// SelectInlineAsmMemoryOperand — handle "m", "o", and "X" inline asm memory
+// constraints.  MicroBlaze uses base + signed-16-bit-offset addressing for
+// loads and stores, so we decompose via SelectADDRri.  The 'g' ("general")
+// constraint is remapped to C_RegisterClass in getConstraintType(), so it
+// never reaches here as a memory operand in normal use; this implementation
+// covers "m"/"o"/"X" when they appear explicitly in the asm template.
+bool MicroBlazeDAGToDAGISel::SelectInlineAsmMemoryOperand(
+    const SDValue &Op, InlineAsm::ConstraintCode ConstraintCode,
+    std::vector<SDValue> &OutOps) {
+  SDValue Base, Offset;
+  switch (ConstraintCode) {
+  default:
+    return true; // unknown constraint — signal failure to the caller
+  case InlineAsm::ConstraintCode::m:
+  case InlineAsm::ConstraintCode::o:
+  case InlineAsm::ConstraintCode::X:
+    if (!SelectADDRri(Op, Base, Offset))
+      return true;
+    break;
+  }
+  OutOps.push_back(Base);
+  OutOps.push_back(Offset);
+  return false; // success
+}
+
 // SelectFSLImm — match a constant FSL port (0..15) and bind it to rfslN so a
 // static FSL get/put can encode the port in the instruction word.
 bool MicroBlazeDAGToDAGISel::SelectFSLImm(SDValue N, SDValue &Port) {

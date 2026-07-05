@@ -1699,6 +1699,23 @@ SDValue MicroBlazeTargetLowering::LowerReturn(
 // Inline assembly constraints
 //===----------------------------------------------------------------------===//
 
+TargetLowering::ConstraintType
+MicroBlazeTargetLowering::getConstraintType(StringRef Constraint) const {
+  if (Constraint.size() == 1) {
+    switch (Constraint[0]) {
+    // 'g' = "general" (register, memory, or immediate).  MicroBlaze inline asm
+    // has no complex memory addressing modes, so always satisfy 'g' with a GPR.
+    // Without this override the base class maps 'g' to C_General, which on a
+    // register-pressure spill falls back to memory and crashes ISel.
+    case 'g':
+      return C_RegisterClass;
+    default:
+      break;
+    }
+  }
+  return TargetLowering::getConstraintType(Constraint);
+}
+
 std::pair<unsigned, const TargetRegisterClass *>
 MicroBlazeTargetLowering::getRegForInlineAsmConstraint(
     const TargetRegisterInfo *TRI, StringRef Constraint, MVT VT) const {

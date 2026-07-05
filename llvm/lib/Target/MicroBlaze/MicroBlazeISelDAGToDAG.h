@@ -14,6 +14,7 @@
 #include "MicroBlazeTargetMachine.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/SelectionDAGISel.h"
+#include "llvm/IR/InlineAsm.h"
 
 namespace llvm {
 
@@ -52,6 +53,10 @@ public:
 
   bool tryBSEFI(SDNode *N);
   bool tryBSIFI(SDNode *N);
+
+  bool SelectInlineAsmMemoryOperand(const SDValue &Op,
+                                    InlineAsm::ConstraintCode ConstraintCode,
+                                    std::vector<SDValue> &OutOps) override;
 
   void Select(SDNode *Node) override;
 
