@@ -83,6 +83,22 @@ void MicroBlazeSubtarget::initLibcallLoweringInfo(
       {RTLIB::SHL_I64, RTLIB::impl___ashldi3},
       {RTLIB::SRL_I64, RTLIB::impl___lshrdi3},
       {RTLIB::SRA_I64, RTLIB::impl___ashrdi3},
+      // 8-byte atomics: MicroBlaze has no 64-bit memory primitive (UG984 Ch.2).
+      // AtomicExpand routes load atomic i64 / store atomic i64 / RMWs to these
+      // sized libcalls; our stubs (atomic_stubs.c) mask MSR[IE] around the
+      // two-word access to provide interrupt-level atomicity.
+      // MaxAtomicPromoteWidth=64 in MicroBlaze.h ensures _Atomic long long gets
+      // 8-byte alignment so AtomicExpand's alignment vs. size check passes.
+      {RTLIB::ATOMIC_LOAD_8, RTLIB::impl___atomic_load_8},
+      {RTLIB::ATOMIC_STORE_8, RTLIB::impl___atomic_store_8},
+      {RTLIB::ATOMIC_EXCHANGE_8, RTLIB::impl___atomic_exchange_8},
+      {RTLIB::ATOMIC_COMPARE_EXCHANGE_8, RTLIB::impl___atomic_compare_exchange_8},
+      {RTLIB::ATOMIC_FETCH_ADD_8, RTLIB::impl___atomic_fetch_add_8},
+      {RTLIB::ATOMIC_FETCH_SUB_8, RTLIB::impl___atomic_fetch_sub_8},
+      {RTLIB::ATOMIC_FETCH_AND_8, RTLIB::impl___atomic_fetch_and_8},
+      {RTLIB::ATOMIC_FETCH_OR_8, RTLIB::impl___atomic_fetch_or_8},
+      {RTLIB::ATOMIC_FETCH_XOR_8, RTLIB::impl___atomic_fetch_xor_8},
+      {RTLIB::ATOMIC_FETCH_NAND_8, RTLIB::impl___atomic_fetch_nand_8},
       // Memory intrinsics: getMemcpy/getMemset/getMemmove use
       // SelectionDAG::Libcalls
       // (the analysis-pass copy), not TargetLowering::Libcalls. Both copies are

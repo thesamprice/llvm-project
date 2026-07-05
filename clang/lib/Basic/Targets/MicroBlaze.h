@@ -35,6 +35,18 @@ public:
     // GCC MicroBlaze ABI aligns int64_t / double to 4 bytes, not 8.
     LongLongAlign = 32;
     DoubleAlign = 32;
+    // Promote _Atomic types to their natural size alignment (up to 8 bytes).
+    // Without this, _Atomic long long keeps 4-byte alignment and LLVM's
+    // AtomicExpand pass fatal-errors: it requires align >= size for the
+    // __atomic_load_8/__atomic_store_8 libcall path.  _Atomic double is
+    // unaffected (already routed through the generic __atomic_load call at
+    // the Clang IR level because it's a floating-point type).
+    //
+    // MaxAtomicInlineWidth = 32: correctly marks i8/i16/i32 atomics as
+    // always lock-free (they are Custom-lowered inline); i64 stays at
+    // "sometimes lock-free" since our __atomic_*_8 stubs use interrupt masking.
+    MaxAtomicPromoteWidth = 64;
+    MaxAtomicInlineWidth = 32;
   }
 
   void getTargetDefines(const LangOptions &Opts,
