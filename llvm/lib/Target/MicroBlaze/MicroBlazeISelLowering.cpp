@@ -616,15 +616,17 @@ SDValue MicroBlazeTargetLowering::LowerRETURNADDR(SDValue Op,
   MachineFrameInfo &MFI = MF.getFrameInfo();
   MFI.setReturnAddressIsTaken(true);
 
-  unsigned Depth = Op.getConstantOperandVal(0);
-  if (Depth > 0)
-    // Unwinding through multiple frames requires a saved frame-pointer chain,
-    // which MicroBlaze does not maintain by default.
-    report_fatal_error(
-        "MicroBlaze: __builtin_return_address with depth > 0 is not supported");
-
   EVT VT = Op.getValueType();
   SDLoc DL(Op);
+
+  unsigned Depth = Op.getConstantOperandVal(0);
+  if (Depth > 0)
+    // MicroBlaze does not maintain a saved frame-pointer chain, so stack
+    // unwinding past the current frame is not possible.  Return null rather
+    // than aborting compilation; callers that check the result against null
+    // will handle this gracefully.
+    return DAG.getConstant(0, DL, VT);
+
   // R15 is the hardware link register; it holds the return address at function
   // entry.  Anchoring the copy to getEntryNode() captures the entry value
   // before any calls inside the function overwrite R15.
