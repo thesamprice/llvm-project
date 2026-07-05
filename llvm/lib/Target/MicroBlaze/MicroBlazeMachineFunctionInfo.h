@@ -31,6 +31,8 @@ class MicroBlazeMachineFunctionInfo : public MachineFunctionInfo {
   int R17SpillSlot = -1;
   int R18SpillSlot = -1;
   int MSRSpillSlot = -1;
+  // Frame index of the R19 (frame pointer) save slot when hasFP is true.
+  int FPSpillSlot = -1;
 
 public:
   MicroBlazeMachineFunctionInfo() = default;
@@ -65,6 +67,8 @@ public:
   void setR18SpillSlot(int S) { R18SpillSlot = S; }
   int getMSRSpillSlot() const { return MSRSpillSlot; }
   void setMSRSpillSlot(int S) { MSRSpillSlot = S; }
+  int getFPSpillSlot() const { return FPSpillSlot; }
+  void setFPSpillSlot(int S) { FPSpillSlot = S; }
 };
 
 } // namespace llvm

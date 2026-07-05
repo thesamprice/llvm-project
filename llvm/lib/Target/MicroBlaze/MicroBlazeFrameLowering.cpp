@@ -41,6 +41,7 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/RegisterScavenging.h"
 #include "llvm/IR/Function.h"
+#include "llvm/Target/TargetMachine.h"
 
 using namespace llvm;
 // isMicroBlazeInterruptFunc / isMicroBlazeInterruptHandler are declared in
@@ -71,7 +72,9 @@ MicroBlazeFrameLowering::MicroBlazeFrameLowering(const MicroBlazeSubtarget &STI)
       STI(STI) {}
 
 bool MicroBlazeFrameLowering::hasFPImpl(const MachineFunction &MF) const {
-  return false;
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  return MF.getTarget().Options.DisableFramePointerElim(MF) ||
+         MFI.hasVarSizedObjects() || MFI.isFrameAddressTaken();
 }
 
 //===----------------------------------------------------------------------===//
@@ -110,6 +113,15 @@ void MicroBlazeFrameLowering::determineCalleeSaves(MachineFunction &MF,
     int LRSlot = MFI.CreateStackObject(4, Align(4), /*isSS=*/true);
     FuncInfo->setLRSpillSlot(LRSlot);
     FuncInfo->setSpilledLR(true);
+  }
+
+  // When a frame pointer is needed (VLAs or forced), allocate a slot for the
+  // caller's R19 value.  PEI will not save R19 itself (it's reserved when
+  // hasFP is true), so emitPrologue/emitEpilogue handle it explicitly using
+  // the slot index stored here.
+  if (hasFP(MF)) {
+    int FPSlot = MFI.CreateStackObject(4, Align(4), /*isSS=*/true);
+    FuncInfo->setFPSpillSlot(FPSlot);
   }
 }
 
@@ -203,11 +215,31 @@ void MicroBlazeFrameLowering::emitPrologue(MachineFunction &MF,
   emitAddImmSP(MBB, MBBI, DL, MBlazeI, -(int64_t)StackSize,
                MachineInstr::FrameSetup);
 
+  // When a frame pointer is needed, save the caller's R19 (using R1 which
+  // equals the new fixed-frame base right after the SP decrement), then set
+  // R19 = R1 so it permanently tracks the fixed-frame base even after VLA
+  // allocations move R1.
+  if (hasFP(MF)) {
+    int FPSlot = FuncInfo->getFPSpillSlot();
+    int64_t FPOffset = MFI.getObjectOffset(FPSlot) + (int64_t)StackSize;
+    BuildMI(MBB, MBBI, DL, MBlazeI->get(MicroBlaze::SWI))
+        .addReg(MicroBlaze::R19)
+        .addReg(MicroBlaze::R1)
+        .addImm(FPOffset)
+        .setMIFlag(MachineInstr::FrameSetup);
+    BuildMI(MBB, MBBI, DL, MBlazeI->get(MicroBlaze::ADDK), MicroBlaze::R19)
+        .addReg(MicroBlaze::R1)
+        .addReg(MicroBlaze::R0)
+        .setMIFlag(MachineInstr::FrameSetup);
+  }
+
   // Save R15 (link register) if this function makes calls.
   if (FuncInfo->hasSpilledLR()) {
     int LRSlot = FuncInfo->getLRSpillSlot();
     // getObjectOffset returns offset relative to the fixed-object area top
     // (which is at the incoming SP). Add StackSize to get SP-relative offset.
+    // When hasFP, R19 = R1 here so either register is equivalent; use R1 for
+    // simplicity (R1 is still at the fixed-frame base before any VLAs).
     int64_t Offset = MFI.getObjectOffset(LRSlot) + (int64_t)StackSize;
     BuildMI(MBB, MBBI, DL, MBlazeI->get(MicroBlaze::SWI))
         .addReg(MicroBlaze::R15)
@@ -233,18 +265,52 @@ void MicroBlazeFrameLowering::emitEpilogue(MachineFunction &MF,
   if (StackSize == 0)
     return;
 
-  // Restore R15 (link register) if it was saved in the prologue.
-  if (FuncInfo->hasSpilledLR()) {
-    int LRSlot = FuncInfo->getLRSpillSlot();
-    int64_t Offset = MFI.getObjectOffset(LRSlot) + (int64_t)StackSize;
-    BuildMI(MBB, MBBI, DL, MBlazeI->get(MicroBlaze::LWI), MicroBlaze::R15)
-        .addReg(MicroBlaze::R1)
-        .addImm(Offset)
-        .setMIFlag(MachineInstr::FrameDestroy);
-  }
+  if (hasFP(MF)) {
+    // Epilogue with frame pointer: R1 has been moved by VLA allocations, but
+    // R19 still holds the fixed-frame base (= entry R1 - StackSize).
+    //
+    // Order matters — CSR restores (R22-R31) have already been inserted by PEI
+    // via restoreCalleeSavedRegisters using R19-relative frame indices, so R19
+    // must still equal the fixed-frame base when those execute.  The code below
+    // is appended *after* those restores (emitEpilogue inserts before rtsd,
+    // after the CSR restores inserted by restoreCalleeSavedRegisters).
 
-  emitAddImmSP(MBB, MBBI, DL, MBlazeI, (int64_t)StackSize,
-               MachineInstr::FrameDestroy);
+    // 1. Restore R15 using R19 (R1 may have been moved by VLAs).
+    if (FuncInfo->hasSpilledLR()) {
+      int LRSlot = FuncInfo->getLRSpillSlot();
+      int64_t Offset = MFI.getObjectOffset(LRSlot) + (int64_t)StackSize;
+      BuildMI(MBB, MBBI, DL, MBlazeI->get(MicroBlaze::LWI), MicroBlaze::R15)
+          .addReg(MicroBlaze::R19)
+          .addImm(Offset)
+          .setMIFlag(MachineInstr::FrameDestroy);
+    }
+    // 2. Restore SP: R1 = R19 + StackSize = original entry SP.
+    BuildMI(MBB, MBBI, DL, MBlazeI->get(MicroBlaze::ADDIK), MicroBlaze::R1)
+        .addReg(MicroBlaze::R19)
+        .addImm((int64_t)StackSize)
+        .setMIFlag(MachineInstr::FrameDestroy);
+    // 3. Restore caller's R19 from the FP slot.  R1 is now the old entry SP,
+    //    so getObjectOffset (negative, relative to entry SP) gives the right
+    //    R1-relative offset to the saved R19 value.
+    int FPSlot = FuncInfo->getFPSpillSlot();
+    int64_t FPOffset = MFI.getObjectOffset(FPSlot);
+    BuildMI(MBB, MBBI, DL, MBlazeI->get(MicroBlaze::LWI), MicroBlaze::R19)
+        .addReg(MicroBlaze::R1)
+        .addImm(FPOffset)
+        .setMIFlag(MachineInstr::FrameDestroy);
+  } else {
+    // Normal (no FP) epilogue.
+    if (FuncInfo->hasSpilledLR()) {
+      int LRSlot = FuncInfo->getLRSpillSlot();
+      int64_t Offset = MFI.getObjectOffset(LRSlot) + (int64_t)StackSize;
+      BuildMI(MBB, MBBI, DL, MBlazeI->get(MicroBlaze::LWI), MicroBlaze::R15)
+          .addReg(MicroBlaze::R1)
+          .addImm(Offset)
+          .setMIFlag(MachineInstr::FrameDestroy);
+    }
+    emitAddImmSP(MBB, MBBI, DL, MBlazeI, (int64_t)StackSize,
+                 MachineInstr::FrameDestroy);
+  }
 }
 
 //===----------------------------------------------------------------------===//

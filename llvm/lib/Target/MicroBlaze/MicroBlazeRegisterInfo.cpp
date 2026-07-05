@@ -110,20 +110,23 @@ bool MicroBlazeRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   const MachineFrameInfo &MFI = MF.getFrameInfo();
 
   int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
-  // Offset from the stack pointer to the start of this frame object.
-  // MachineFrameInfo::getObjectOffset returns offset relative to the
-  // bottom of the fixed-object area; add stack size to get SP-relative.
+  // getObjectOffset() returns a negative offset from the incoming SP; adding
+  // StackSize converts it to a positive offset from the fixed-frame base.
+  //
+  // When hasFP, R19 permanently holds the fixed-frame base even after VLA
+  // allocations move R1, so use R19 and skip SPAdj (which tracks R1 drift).
+  // When !hasFP, R1 is the base and SPAdj corrects for ADJCALLSTACKDOWN/UP.
+  //
+  // The MCCodeEmitter auto-emits an IMM prefix for offsets exceeding 16 bits,
+  // so we leave the full offset here rather than splitting into IMM+lo16.
+  bool UseFP =
+      MF.getSubtarget<MicroBlazeSubtarget>().getFrameLowering()->hasFP(MF);
+  Register BaseReg = UseFP ? MicroBlaze::R19 : MicroBlaze::R1;
   int64_t Offset = MFI.getObjectOffset(FrameIndex) + MFI.getStackSize() +
-                   MI.getOperand(FIOperandNum + 1).getImm() + SPAdj;
+                   MI.getOperand(FIOperandNum + 1).getImm() +
+                   (UseFP ? 0 : SPAdj);
 
-  // Leave the full Offset in the instruction's immediate field even when it
-  // exceeds 16 bits.  The MCCodeEmitter detects the overflow and automatically
-  // emits an IMM prefix during encoding — keeping a single MachineInstr rather
-  // than an IMM+target pair prevents the post-RA instruction scheduler from
-  // reordering the pair and corrupting the IMM latch.
-
-  // Replace the FrameIndex operand with R1 (stack pointer).
-  MI.getOperand(FIOperandNum).ChangeToRegister(MicroBlaze::R1, /*isDef=*/false);
+  MI.getOperand(FIOperandNum).ChangeToRegister(BaseReg, /*isDef=*/false);
   MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
   return false;
 }
