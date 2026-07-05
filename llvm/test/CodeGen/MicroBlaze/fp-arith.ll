@@ -17,13 +17,13 @@ define float @fadd_test(float %a, float %b) {
 ;
 ; SOFT-LABEL: fadd_test:
 ; SOFT:       # %bb.0:
-; SOFT-NEXT:    addik r1, r1, -4
-; SOFT-NEXT:    swi r15, r1, 0
+; SOFT-NEXT:    addik r1, r1, -8
+; SOFT-NEXT:    swi r15, r1, 4
 ; SOFT-NEXT:    bralid r15, __addsf3
 ; SOFT-NEXT:    nop
-; SOFT-NEXT:    lwi r15, r1, 0
+; SOFT-NEXT:    lwi r15, r1, 4
 ; SOFT-NEXT:    rtsd r15, 8
-; SOFT-NEXT:    addik r1, r1, 4
+; SOFT-NEXT:    addik r1, r1, 8
   %r = fadd float %a, %b
   ret float %r
 }
@@ -38,13 +38,13 @@ define float @fsub_test(float %a, float %b) {
 ;
 ; SOFT-LABEL: fsub_test:
 ; SOFT:       # %bb.0:
-; SOFT-NEXT:    addik r1, r1, -4
-; SOFT-NEXT:    swi r15, r1, 0
+; SOFT-NEXT:    addik r1, r1, -8
+; SOFT-NEXT:    swi r15, r1, 4
 ; SOFT-NEXT:    bralid r15, __subsf3
 ; SOFT-NEXT:    nop
-; SOFT-NEXT:    lwi r15, r1, 0
+; SOFT-NEXT:    lwi r15, r1, 4
 ; SOFT-NEXT:    rtsd r15, 8
-; SOFT-NEXT:    addik r1, r1, 4
+; SOFT-NEXT:    addik r1, r1, 8
   %r = fsub float %a, %b
   ret float %r
 }
@@ -58,13 +58,13 @@ define float @fmul_test(float %a, float %b) {
 ;
 ; SOFT-LABEL: fmul_test:
 ; SOFT:       # %bb.0:
-; SOFT-NEXT:    addik r1, r1, -4
-; SOFT-NEXT:    swi r15, r1, 0
+; SOFT-NEXT:    addik r1, r1, -8
+; SOFT-NEXT:    swi r15, r1, 4
 ; SOFT-NEXT:    bralid r15, __mulsf3
 ; SOFT-NEXT:    nop
-; SOFT-NEXT:    lwi r15, r1, 0
+; SOFT-NEXT:    lwi r15, r1, 4
 ; SOFT-NEXT:    rtsd r15, 8
-; SOFT-NEXT:    addik r1, r1, 4
+; SOFT-NEXT:    addik r1, r1, 8
   %r = fmul float %a, %b
   ret float %r
 }
@@ -78,13 +78,13 @@ define float @fdiv_test(float %a, float %b) {
 ;
 ; SOFT-LABEL: fdiv_test:
 ; SOFT:       # %bb.0:
-; SOFT-NEXT:    addik r1, r1, -4
-; SOFT-NEXT:    swi r15, r1, 0
+; SOFT-NEXT:    addik r1, r1, -8
+; SOFT-NEXT:    swi r15, r1, 4
 ; SOFT-NEXT:    bralid r15, __divsf3
 ; SOFT-NEXT:    nop
-; SOFT-NEXT:    lwi r15, r1, 0
+; SOFT-NEXT:    lwi r15, r1, 4
 ; SOFT-NEXT:    rtsd r15, 8
-; SOFT-NEXT:    addik r1, r1, 4
+; SOFT-NEXT:    addik r1, r1, 8
   %r = fdiv float %a, %b
   ret float %r
 }
@@ -98,13 +98,13 @@ define float @fsqrt_test(float %a) {
 ;
 ; SOFT-LABEL: fsqrt_test:
 ; SOFT:       # %bb.0:
-; SOFT-NEXT:    addik r1, r1, -4
-; SOFT-NEXT:    swi r15, r1, 0
+; SOFT-NEXT:    addik r1, r1, -8
+; SOFT-NEXT:    swi r15, r1, 4
 ; SOFT-NEXT:    bralid r15, sqrtf
 ; SOFT-NEXT:    nop
-; SOFT-NEXT:    lwi r15, r1, 0
+; SOFT-NEXT:    lwi r15, r1, 4
 ; SOFT-NEXT:    rtsd r15, 8
-; SOFT-NEXT:    addik r1, r1, 4
+; SOFT-NEXT:    addik r1, r1, 8
   %r = call float @llvm.sqrt.f32(float %a)
   ret float %r
 }
@@ -118,13 +118,13 @@ define float @sint_to_fp_test(i32 %a) {
 ;
 ; SOFT-LABEL: sint_to_fp_test:
 ; SOFT:       # %bb.0:
-; SOFT-NEXT:    addik r1, r1, -4
-; SOFT-NEXT:    swi r15, r1, 0
+; SOFT-NEXT:    addik r1, r1, -8
+; SOFT-NEXT:    swi r15, r1, 4
 ; SOFT-NEXT:    bralid r15, __floatsisf
 ; SOFT-NEXT:    nop
-; SOFT-NEXT:    lwi r15, r1, 0
+; SOFT-NEXT:    lwi r15, r1, 4
 ; SOFT-NEXT:    rtsd r15, 8
-; SOFT-NEXT:    addik r1, r1, 4
+; SOFT-NEXT:    addik r1, r1, 8
   %r = sitofp i32 %a to float
   ret float %r
 }
@@ -138,13 +138,13 @@ define i32 @fp_to_sint_test(float %a) {
 ;
 ; SOFT-LABEL: fp_to_sint_test:
 ; SOFT:       # %bb.0:
-; SOFT-NEXT:    addik r1, r1, -4
-; SOFT-NEXT:    swi r15, r1, 0
+; SOFT-NEXT:    addik r1, r1, -8
+; SOFT-NEXT:    swi r15, r1, 4
 ; SOFT-NEXT:    bralid r15, __fixsfsi
 ; SOFT-NEXT:    nop
-; SOFT-NEXT:    lwi r15, r1, 0
+; SOFT-NEXT:    lwi r15, r1, 4
 ; SOFT-NEXT:    rtsd r15, 8
-; SOFT-NEXT:    addik r1, r1, 4
+; SOFT-NEXT:    addik r1, r1, 8
   %r = fptosi float %a to i32
   ret i32 %r
 }

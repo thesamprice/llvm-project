@@ -13,8 +13,8 @@
 define i32 @f(i32 %x) {
 ; CHECK-LABEL: f:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    addik r1, r1, -4
-; CHECK-NEXT:    swi r15, r1, 0
+; CHECK-NEXT:    addik r1, r1, -8
+; CHECK-NEXT:    swi r15, r1, 4
 ; CHECK-NEXT:    bralid r15, __ashlsi3
 ; CHECK-NEXT:    addik r6, r0, 2
 ; CHECK-NEXT:    addik r4, r0, f.tab
@@ -32,9 +32,9 @@ define i32 @f(i32 %x) {
 ; CHECK-NEXT:  .LBB0_3: # %B
 ; CHECK-NEXT:    addik r3, r0, 2
 ; CHECK-NEXT:  .LBB0_4: # %A
-; CHECK-NEXT:    lwi r15, r1, 0
+; CHECK-NEXT:    lwi r15, r1, 4
 ; CHECK-NEXT:    rtsd r15, 8
-; CHECK-NEXT:    addik r1, r1, 4
+; CHECK-NEXT:    addik r1, r1, 8
 entry:
   %t = getelementptr inbounds [3 x ptr], ptr @f.tab, i32 0, i32 %x
   %a = load ptr, ptr %t

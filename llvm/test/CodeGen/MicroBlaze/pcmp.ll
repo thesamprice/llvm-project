@@ -68,12 +68,12 @@ define i32 @clz_maybedef(i32 %x) {
 ;
 ; NOFEAT-LABEL: clz_maybedef:
 ; NOFEAT:       # %bb.0:
-; NOFEAT-NEXT:    addik r1, r1, -20
-; NOFEAT-NEXT:    swi r15, r1, 0
-; NOFEAT-NEXT:    swi r19, r1, 16
-; NOFEAT-NEXT:    swi r22, r1, 12
-; NOFEAT-NEXT:    swi r23, r1, 8
-; NOFEAT-NEXT:    swi r24, r1, 4
+; NOFEAT-NEXT:    addik r1, r1, -24
+; NOFEAT-NEXT:    swi r15, r1, 4
+; NOFEAT-NEXT:    swi r19, r1, 20
+; NOFEAT-NEXT:    swi r22, r1, 16
+; NOFEAT-NEXT:    swi r23, r1, 12
+; NOFEAT-NEXT:    swi r24, r1, 8
 ; NOFEAT-NEXT:    beqi r5, .LBB2_2
 ; NOFEAT-NEXT:  .LBB2_1: # %cond.false
 ; NOFEAT-NEXT:    addik r23, r0, 1
@@ -126,13 +126,13 @@ define i32 @clz_maybedef(i32 %x) {
 ; NOFEAT-NEXT:  .LBB2_2:
 ; NOFEAT-NEXT:    addik r3, r0, 32
 ; NOFEAT-NEXT:  .LBB2_3: # %cond.end
-; NOFEAT-NEXT:    lwi r24, r1, 4
-; NOFEAT-NEXT:    lwi r23, r1, 8
-; NOFEAT-NEXT:    lwi r22, r1, 12
-; NOFEAT-NEXT:    lwi r19, r1, 16
-; NOFEAT-NEXT:    lwi r15, r1, 0
+; NOFEAT-NEXT:    lwi r24, r1, 8
+; NOFEAT-NEXT:    lwi r23, r1, 12
+; NOFEAT-NEXT:    lwi r22, r1, 16
+; NOFEAT-NEXT:    lwi r19, r1, 20
+; NOFEAT-NEXT:    lwi r15, r1, 4
 ; NOFEAT-NEXT:    rtsd r15, 8
-; NOFEAT-NEXT:    addik r1, r1, 20
+; NOFEAT-NEXT:    addik r1, r1, 24
   %r = call i32 @llvm.ctlz.i32(i32 %x, i1 false)
   ret i32 %r
 }
@@ -147,13 +147,13 @@ define i32 @clz_poisondef(i32 %x) {
 ;
 ; NOFEAT-LABEL: clz_poisondef:
 ; NOFEAT:       # %bb.0:
-; NOFEAT-NEXT:    addik r1, r1, -20
-; NOFEAT-NEXT:    swi r15, r1, 0
-; NOFEAT-NEXT:    swi r19, r1, 16
-; NOFEAT-NEXT:    swi r22, r1, 12
-; NOFEAT-NEXT:    swi r23, r1, 8
+; NOFEAT-NEXT:    addik r1, r1, -24
+; NOFEAT-NEXT:    swi r15, r1, 4
+; NOFEAT-NEXT:    swi r19, r1, 20
+; NOFEAT-NEXT:    swi r22, r1, 16
+; NOFEAT-NEXT:    swi r23, r1, 12
 ; NOFEAT-NEXT:    addik r23, r0, 1
-; NOFEAT-NEXT:    swi r24, r1, 4
+; NOFEAT-NEXT:    swi r24, r1, 8
 ; NOFEAT-NEXT:    addk r19, r5, r0
 ; NOFEAT-NEXT:    bralid r15, __lshrsi3
 ; NOFEAT-NEXT:    addk r6, r23, r0
@@ -199,13 +199,13 @@ define i32 @clz_poisondef(i32 %x) {
 ; NOFEAT-NEXT:    addik r4, r0, 16843009
 ; NOFEAT-NEXT:    bralid r15, __lshrsi3
 ; NOFEAT-NEXT:    mul r5, r3, r4
-; NOFEAT-NEXT:    lwi r24, r1, 4
-; NOFEAT-NEXT:    lwi r23, r1, 8
-; NOFEAT-NEXT:    lwi r22, r1, 12
-; NOFEAT-NEXT:    lwi r19, r1, 16
-; NOFEAT-NEXT:    lwi r15, r1, 0
+; NOFEAT-NEXT:    lwi r24, r1, 8
+; NOFEAT-NEXT:    lwi r23, r1, 12
+; NOFEAT-NEXT:    lwi r22, r1, 16
+; NOFEAT-NEXT:    lwi r19, r1, 20
+; NOFEAT-NEXT:    lwi r15, r1, 4
 ; NOFEAT-NEXT:    rtsd r15, 8
-; NOFEAT-NEXT:    addik r1, r1, 20
+; NOFEAT-NEXT:    addik r1, r1, 24
   %r = call i32 @llvm.ctlz.i32(i32 %x, i1 true)
   ret i32 %r
 }

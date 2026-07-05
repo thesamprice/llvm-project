@@ -26,25 +26,25 @@ define i32 @fcmp_select_lt(float %a, float %b, i32 %x, i32 %y) {
 ;
 ; SOFT-LABEL: fcmp_select_lt:
 ; SOFT:       # %bb.0:
-; SOFT-NEXT:    addik r1, r1, -12
-; SOFT-NEXT:    swi r15, r1, 0
-; SOFT-NEXT:    swi r19, r1, 8
-; SOFT-NEXT:    swi r22, r1, 4
+; SOFT-NEXT:    addik r1, r1, -16
+; SOFT-NEXT:    swi r15, r1, 4
+; SOFT-NEXT:    swi r19, r1, 12
+; SOFT-NEXT:    swi r22, r1, 8
 ; SOFT-NEXT:    addk r22, r8, r0
 ; SOFT-NEXT:    bralid r15, __ltsf2
 ; SOFT-NEXT:    addk r19, r7, r0
 ; SOFT-NEXT:    addik r4, r0, 0
 ; SOFT-NEXT:    cmp r3, r4, r3
 ; SOFT-NEXT:    bltid r3, .LBB0_2
-; SOFT-NEXT:    lwi r15, r1, 0
+; SOFT-NEXT:    lwi r15, r1, 4
 ; SOFT-NEXT:  .LBB0_1:
 ; SOFT-NEXT:    addk r19, r22, r0
 ; SOFT-NEXT:  .LBB0_2:
 ; SOFT-NEXT:    addk r3, r19, r0
-; SOFT-NEXT:    lwi r22, r1, 4
-; SOFT-NEXT:    lwi r19, r1, 8
+; SOFT-NEXT:    lwi r22, r1, 8
+; SOFT-NEXT:    lwi r19, r1, 12
 ; SOFT-NEXT:    rtsd r15, 8
-; SOFT-NEXT:    addik r1, r1, 12
+; SOFT-NEXT:    addik r1, r1, 16
   %cond = fcmp olt float %a, %b
   %r = select i1 %cond, i32 %x, i32 %y
   ret i32 %r
@@ -67,25 +67,25 @@ define i32 @fcmp_select_ult(float %a, float %b, i32 %x, i32 %y) {
 ;
 ; SOFT-LABEL: fcmp_select_ult:
 ; SOFT:       # %bb.0:
-; SOFT-NEXT:    addik r1, r1, -12
-; SOFT-NEXT:    swi r15, r1, 0
-; SOFT-NEXT:    swi r19, r1, 8
-; SOFT-NEXT:    swi r22, r1, 4
+; SOFT-NEXT:    addik r1, r1, -16
+; SOFT-NEXT:    swi r15, r1, 4
+; SOFT-NEXT:    swi r19, r1, 12
+; SOFT-NEXT:    swi r22, r1, 8
 ; SOFT-NEXT:    addk r22, r8, r0
 ; SOFT-NEXT:    bralid r15, __gesf2
 ; SOFT-NEXT:    addk r19, r7, r0
 ; SOFT-NEXT:    addik r4, r0, 0
 ; SOFT-NEXT:    cmp r3, r4, r3
 ; SOFT-NEXT:    bltid r3, .LBB1_2
-; SOFT-NEXT:    lwi r15, r1, 0
+; SOFT-NEXT:    lwi r15, r1, 4
 ; SOFT-NEXT:  .LBB1_1:
 ; SOFT-NEXT:    addk r19, r22, r0
 ; SOFT-NEXT:  .LBB1_2:
 ; SOFT-NEXT:    addk r3, r19, r0
-; SOFT-NEXT:    lwi r22, r1, 4
-; SOFT-NEXT:    lwi r19, r1, 8
+; SOFT-NEXT:    lwi r22, r1, 8
+; SOFT-NEXT:    lwi r19, r1, 12
 ; SOFT-NEXT:    rtsd r15, 8
-; SOFT-NEXT:    addik r1, r1, 12
+; SOFT-NEXT:    addik r1, r1, 16
   %cond = fcmp ult float %a, %b
   %r = select i1 %cond, i32 %x, i32 %y
   ret i32 %r
@@ -106,25 +106,25 @@ define i32 @fcmp_select_ord(float %a, float %b, i32 %x, i32 %y) {
 ;
 ; SOFT-LABEL: fcmp_select_ord:
 ; SOFT:       # %bb.0:
-; SOFT-NEXT:    addik r1, r1, -12
-; SOFT-NEXT:    swi r15, r1, 0
-; SOFT-NEXT:    swi r19, r1, 8
-; SOFT-NEXT:    swi r22, r1, 4
+; SOFT-NEXT:    addik r1, r1, -16
+; SOFT-NEXT:    swi r15, r1, 4
+; SOFT-NEXT:    swi r19, r1, 12
+; SOFT-NEXT:    swi r22, r1, 8
 ; SOFT-NEXT:    addk r22, r8, r0
 ; SOFT-NEXT:    bralid r15, __unordsf2
 ; SOFT-NEXT:    addk r19, r7, r0
 ; SOFT-NEXT:    addik r4, r0, 0
 ; SOFT-NEXT:    rsubk r3, r3, r4
 ; SOFT-NEXT:    beqid r3, .LBB2_2
-; SOFT-NEXT:    lwi r15, r1, 0
+; SOFT-NEXT:    lwi r15, r1, 4
 ; SOFT-NEXT:  .LBB2_1:
 ; SOFT-NEXT:    addk r19, r22, r0
 ; SOFT-NEXT:  .LBB2_2:
 ; SOFT-NEXT:    addk r3, r19, r0
-; SOFT-NEXT:    lwi r22, r1, 4
-; SOFT-NEXT:    lwi r19, r1, 8
+; SOFT-NEXT:    lwi r22, r1, 8
+; SOFT-NEXT:    lwi r19, r1, 12
 ; SOFT-NEXT:    rtsd r15, 8
-; SOFT-NEXT:    addik r1, r1, 12
+; SOFT-NEXT:    addik r1, r1, 16
   %cond = fcmp ord float %a, %b
   %r = select i1 %cond, i32 %x, i32 %y
   ret i32 %r
@@ -145,25 +145,25 @@ define float @fcmp_fselect_lt(float %a, float %b, float %x, float %y) {
 ;
 ; SOFT-LABEL: fcmp_fselect_lt:
 ; SOFT:       # %bb.0:
-; SOFT-NEXT:    addik r1, r1, -12
-; SOFT-NEXT:    swi r15, r1, 0
-; SOFT-NEXT:    swi r19, r1, 8
-; SOFT-NEXT:    swi r22, r1, 4
+; SOFT-NEXT:    addik r1, r1, -16
+; SOFT-NEXT:    swi r15, r1, 4
+; SOFT-NEXT:    swi r19, r1, 12
+; SOFT-NEXT:    swi r22, r1, 8
 ; SOFT-NEXT:    addk r22, r8, r0
 ; SOFT-NEXT:    bralid r15, __ltsf2
 ; SOFT-NEXT:    addk r19, r7, r0
 ; SOFT-NEXT:    addik r4, r0, 0
 ; SOFT-NEXT:    cmp r3, r4, r3
 ; SOFT-NEXT:    bltid r3, .LBB3_2
-; SOFT-NEXT:    lwi r15, r1, 0
+; SOFT-NEXT:    lwi r15, r1, 4
 ; SOFT-NEXT:  .LBB3_1:
 ; SOFT-NEXT:    addk r19, r22, r0
 ; SOFT-NEXT:  .LBB3_2:
 ; SOFT-NEXT:    addk r3, r19, r0
-; SOFT-NEXT:    lwi r22, r1, 4
-; SOFT-NEXT:    lwi r19, r1, 8
+; SOFT-NEXT:    lwi r22, r1, 8
+; SOFT-NEXT:    lwi r19, r1, 12
 ; SOFT-NEXT:    rtsd r15, 8
-; SOFT-NEXT:    addik r1, r1, 12
+; SOFT-NEXT:    addik r1, r1, 16
   %cond = fcmp olt float %a, %b
   %r = select i1 %cond, float %x, float %y
   ret float %r

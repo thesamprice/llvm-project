@@ -24,9 +24,9 @@ declare void @sink(i32)
 define void @sw(i32 %x) {
 ; CHECK-LABEL: sw:
 ; CHECK:       # %bb.0: # %entry
-; CHECK-NEXT:    addik r1, r1, -4
+; CHECK-NEXT:    addik r1, r1, -8
 ; CHECK-NEXT:    addik r3, r0, 7
-; CHECK-NEXT:    swi r15, r1, 0
+; CHECK-NEXT:    swi r15, r1, 4
 ; CHECK-NEXT:    cmpu r3, r5, r3
 ; CHECK-NEXT:    blti r3, .LBB0_11
 ; CHECK-NEXT:  .LBB0_1: # %entry
@@ -61,15 +61,15 @@ define void @sw(i32 %x) {
 ; CHECK-NEXT:    bralid r15, sink
 ; CHECK-NEXT:    nop
 ; CHECK-NEXT:  .LBB0_11: # %def
-; CHECK-NEXT:    lwi r15, r1, 0
+; CHECK-NEXT:    lwi r15, r1, 4
 ; CHECK-NEXT:    rtsd r15, 8
-; CHECK-NEXT:    addik r1, r1, 4
+; CHECK-NEXT:    addik r1, r1, 8
 ;
 ; PIC-LABEL: sw:
 ; PIC:       # %bb.0: # %entry
-; PIC-NEXT:    addik r1, r1, -4
+; PIC-NEXT:    addik r1, r1, -8
 ; PIC-NEXT:    addik r3, r0, 7
-; PIC-NEXT:    swi r15, r1, 0
+; PIC-NEXT:    swi r15, r1, 4
 ; PIC-NEXT:    cmpu r3, r5, r3
 ; PIC-NEXT:    blti r3, .LBB0_11
 ; PIC-NEXT:  .LBB0_1: # %entry
@@ -106,9 +106,9 @@ define void @sw(i32 %x) {
 ; PIC-NEXT:    bralid r15, sink
 ; PIC-NEXT:    nop
 ; PIC-NEXT:  .LBB0_11: # %def
-; PIC-NEXT:    lwi r15, r1, 0
+; PIC-NEXT:    lwi r15, r1, 4
 ; PIC-NEXT:    rtsd r15, 8
-; PIC-NEXT:    addik r1, r1, 4
+; PIC-NEXT:    addik r1, r1, 8
 entry:
   switch i32 %x, label %def [
     i32 0, label %c0
