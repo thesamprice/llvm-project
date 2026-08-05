@@ -1,0 +1,89 @@
+//===-- BuiltinsMicroBlaze.def - MicroBlaze Builtin database -----*- C++ -*-==//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file defines the MicroBlaze-specific builtin function database.  Users
+// of this file must define the BUILTIN macro to make use of this information.
+//
+//===----------------------------------------------------------------------===//
+
+// The format of this database matches clang/Basic/Builtins.def.
+
+// FSL (Fast Simplex Link) / AXI-Stream access (UG984 5).  Each builtin maps to
+// the matching llvm.microblaze.fsl.* intrinsic (see IntrinsicsMicroBlaze.td).
+// "n" = nothrow; they are not "c" (const) because FIFO reads/writes have side
+// effects that must not be reordered or eliminated.
+
+// GET: int __builtin_microblaze_fsl_<flags>get(int port)
+BUILTIN(__builtin_microblaze_fsl_get, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_eget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_aget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_eaget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_tget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_teget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_taget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_teaget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_cget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_ecget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_caget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_ecaget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_tcget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_tecget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_tcaget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_tecaget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_nget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_neget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_naget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_neaget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_tnget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_tneget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_tnaget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_tneaget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_ncget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_necget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_ncaget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_necaget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_tncget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_tnecget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_tncaget, "ii", "n")
+BUILTIN(__builtin_microblaze_fsl_tnecaget, "ii", "n")
+
+// PUT: void __builtin_microblaze_fsl_<flags>put(int value, int port)
+BUILTIN(__builtin_microblaze_fsl_put, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_eput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_aput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_eaput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_tput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_teput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_taput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_teaput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_cput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_ecput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_caput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_ecaput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_tcput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_tecput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_tcaput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_tecaput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_nput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_neput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_naput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_neaput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_tnput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_tneput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_tnaput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_tneaput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_ncput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_necput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_ncaput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_necaput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_tncput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_tnecput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_tncaput, "vii", "n")
+BUILTIN(__builtin_microblaze_fsl_tnecaput, "vii", "n")
+
+#undef BUILTIN

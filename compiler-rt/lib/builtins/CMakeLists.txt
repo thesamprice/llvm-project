@@ -878,6 +878,12 @@ set(loongarch64_SOURCES
   ${loongarch_SOURCES}
 )
 
+set(microblaze_SOURCES
+  ${GENERIC_SOURCES}
+  microblaze/shift.c
+)
+set(microblazeel_SOURCES ${microblaze_SOURCES})
+
 set(mips_SOURCES ${GENERIC_SOURCES})
 set(mipsel_SOURCES ${mips_SOURCES})
 set(mips64_SOURCES ${GENERIC_TF_SOURCES}

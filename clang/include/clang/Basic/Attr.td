@@ -486,6 +486,7 @@ def TargetMips32 : TargetArch<["mips", "mipsel"]>;
 def TargetAnyMips : TargetArch<["mips", "mipsel", "mips64", "mips64el"]>;
 def TargetMSP430 : TargetArch<["msp430"]>;
 def TargetM68k : TargetArch<["m68k"]>;
+def TargetMicroBlaze : TargetArch<["microblazeel"]>;
 def TargetRISCV : TargetArch<["riscv32", "riscv64", "riscv32be", "riscv64be"]>;
 def TargetX86 : TargetArch<["x86"]>;
 def TargetX86_64 : TargetArch<["x86_64"]>;
@@ -2270,6 +2271,24 @@ def M68kInterrupt : InheritableAttr, TargetSpecificAttr<TargetM68k> {
   let Args = [UnsignedArgument<"Number">];
   let ParseKind = "Interrupt";
   let HasCustomParsing = 1;
+  let Documentation = [Undocumented];
+}
+
+def MicroBlazeInterruptHandler
+    : InheritableAttr, TargetSpecificAttr<TargetMicroBlaze> {
+  // Marks a function as a MicroBlaze interrupt handler: saves/restores the
+  // volatile registers and MSR, and returns with rtid (calling conv cc73).
+  let Spellings = [GNU<"interrupt_handler">];
+  let Subjects = SubjectList<[Function]>;
+  let Documentation = [Undocumented];
+}
+
+def MicroBlazeSaveVolatiles
+    : InheritableAttr, TargetSpecificAttr<TargetMicroBlaze> {
+  // Marks a function that additionally preserves the volatile registers for its
+  // caller and returns normally with rtsd (calling conv cc74).
+  let Spellings = [GNU<"save_volatiles">];
+  let Subjects = SubjectList<[Function]>;
   let Documentation = [Undocumented];
 }
 

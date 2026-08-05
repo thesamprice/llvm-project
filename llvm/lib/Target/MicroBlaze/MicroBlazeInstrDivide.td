@@ -1,0 +1,30 @@
+//===-- MicroBlazeInstrDivide.td - MicroBlaze Instruction Definitions -*- tablegen -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// Integer divide (require +divide, opcode=0x12)
+// UG984 §5 Fig 95: U bit at std bit[1] → func=0x000 (signed) or 0x002 (unsigned).
+// Latency: 1 cycle if rA=0; otherwise 34/35/30 cycles per C_AREA_OPTIMIZED.
+//===----------------------------------------------------------------------===//
+
+let Predicates = [HasDividePred] in {
+  def IDIV  : MBA<0x12, 0x000, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
+                  "idiv\t$rD, $rA, $rB", [], [WriteDiv]> { let hasSideEffects = 1; }
+  def IDIVU : MBA<0x12, 0x002, (outs GPR:$rD), (ins GPR:$rA, GPR:$rB),
+                  "idivu\t$rD, $rA, $rB", [], [WriteDiv]> { let hasSideEffects = 1; }
+
+  // UG984 §5: IDIV writes quotient to rD; rA is clobbered with remainder
+  // (modeled via hasSideEffects above).  Only quotient (rD) is captured here;
+  // ISD::SREM/UREM continue through __modsi3/__umodsi3 libcalls.
+  //
+  // Hardware: idiv rD, rA, rB  →  rD = rB / rA.  DAG (sdiv A, B) = A/B, so
+  // we need rB=A (dividend) and rA=B (divisor): IDIV(rA=$rB, rB=$rA).
+  def : Pat<(sdiv i32:$rA, i32:$rB), (IDIV  GPR:$rB, GPR:$rA)>;
+  def : Pat<(udiv i32:$rA, i32:$rB), (IDIVU GPR:$rB, GPR:$rA)>;
+}
+

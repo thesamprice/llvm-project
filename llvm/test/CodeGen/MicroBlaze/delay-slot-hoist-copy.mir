@@ -1,0 +1,235 @@
+# RUN: llc -mtriple=microblazeel -mattr=+pattern-compare \
+# RUN:   -run-pass=microblaze-delay-slot-filler -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s
+# REQUIRES: microblaze-registered-target
+
+# Unit tests for MicroBlazeDelaySlotFiller::hoistCopyToDelaySlot, exercised in
+# isolation via -run-pass on hand-written MIR.  hoistCopyToDelaySlot recognises
+#
+#   addk  rX, rY, R0                 ; ISel register copy (rX != rY)
+#   [instrs that don't redefine rX/rY, no call/return]
+#   <D-form conditional backward branch>
+#
+# and (1) replaces every USE of rX in the intervening range — the branch
+# included — with rY, then (2) moves the addk into the branch's delay slot.
+#
+# Each function below isolates one decision in that logic.  The companion
+# end-to-end test (delay-slot-hoist-copy.ll) proves the optimization also fires
+# on real qsort codegen.
+
+--- |
+  target triple = "microblazeel"
+  declare void @ext()
+  define void @pos_cmpu(i32 %a, i32 %b, i32 %c) { ret void }
+  define void @pos_branchreg(i32 %a, i32 %b) { ret void }
+  define void @pos_two_addk(i32 %a, i32 %b, i32 %c) { ret void }
+  define void @neg_redef_ry(i32 %a, i32 %b) { ret void }
+  define void @neg_forward(i32 %a, i32 %b) { ret void }
+  define void @neg_call(i32 %a) { ret void }
+...
+
+# ── Positive: copy feeds a cmpu before a backward bgtid ───────────────────────
+# The addk (r6 = r7) is hoisted into the bgtid delay slot and the cmpu's use of
+# r6 is rewritten to r7.
+#
+# CHECK-LABEL: name: pos_cmpu
+# CHECK:      $r4 = CMPU $r7, $r5
+# CHECK-NEXT: BGTID killed $r4, %bb.1 {
+# CHECK-NEXT:   $r6 = ADDK $r7, $r0
+# CHECK-NEXT: }
+---
+name:            pos_cmpu
+tracksRegLiveness: true
+noVRegs:         true
+liveins:
+  - { reg: '$r5' }
+  - { reg: '$r6' }
+  - { reg: '$r7' }
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r5, $r6, $r7
+    $r3 = ADDIK $r0, 0
+
+  bb.1:
+    successors: %bb.1(0x7c000000), %bb.2(0x04000000)
+    liveins: $r3, $r5, $r6, $r7
+    $r6 = ADDK $r7, $r0
+    $r4 = CMPU $r6, $r5
+    BGTID killed $r4, %bb.1
+
+  bb.2:
+    RTSD $r15, 8, implicit $r15
+...
+
+# ── Positive: the branch tests rX directly ───────────────────────────────────
+# Here the branch reads r6 itself; the substitution range includes the branch,
+# so bgeid is rewritten to test r7 and the addk fills its slot.
+#
+# CHECK-LABEL: name: pos_branchreg
+# CHECK:      BGEID $r7, %bb.1 {
+# CHECK-NEXT:   $r6 = ADDK $r7, $r0
+# CHECK-NEXT: }
+---
+name:            pos_branchreg
+tracksRegLiveness: true
+noVRegs:         true
+liveins:
+  - { reg: '$r7' }
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r7
+    $r3 = ADDIK $r0, 0
+
+  bb.1:
+    successors: %bb.1(0x7c000000), %bb.2(0x04000000)
+    liveins: $r3, $r7
+    $r6 = ADDK $r7, $r0
+    BGEID $r6, %bb.1
+
+  bb.2:
+    RTSD $r15, 8, implicit $r15
+...
+
+# ── Positive: two consecutive copies (double-bundle guard) ────────────────────
+# The first addk (r6 = r7) is hoisted, pre-bundling the bgtid.  When the outer
+# loop advances to the second addk (r8 = r5), its inner scan reaches the now
+# already-bundled branch and must NOT try to bundle it again.  Result: the
+# second addk stays put, the cmpu's r6 use is rewritten to r7, and only the
+# first addk lands in the (single) delay slot.
+#
+# CHECK-LABEL: name: pos_two_addk
+# CHECK:      $r8 = ADDK $r5, $r0
+# CHECK-NEXT: $r4 = CMPU $r8, $r7
+# CHECK-NEXT: BGTID killed $r4, %bb.1 {
+# CHECK-NEXT:   $r6 = ADDK $r7, $r0
+# CHECK-NEXT: }
+---
+name:            pos_two_addk
+tracksRegLiveness: true
+noVRegs:         true
+liveins:
+  - { reg: '$r5' }
+  - { reg: '$r7' }
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r5, $r7
+    $r3 = ADDIK $r0, 0
+
+  bb.1:
+    successors: %bb.1(0x7c000000), %bb.2(0x04000000)
+    liveins: $r3, $r5, $r7
+    $r6 = ADDK $r7, $r0
+    $r8 = ADDK $r5, $r0
+    $r4 = CMPU $r8, $r6
+    BGTID killed $r4, %bb.1
+
+  bb.2:
+    liveins: $r6, $r8
+    RTSD $r15, 8, implicit $r15
+...
+
+# ── Negative: rY is redefined before the branch ───────────────────────────────
+# r7 (the copy source) is incremented between the addk and the branch, so the
+# scan aborts: moving r6 = r7 across the redefinition would capture the wrong
+# value.  hoistCopyToDelaySlot performs no substitution — the cmpu must still
+# read r6, proving the abort fired.  (The general filler may fill the slot by a
+# different, separately-guarded mechanism; only the un-substituted cmpu source
+# is asserted here.)
+#
+# CHECK-LABEL: name: neg_redef_ry
+# CHECK:      $r7 = ADDIK $r7, 1
+# CHECK-NEXT: $r4 = CMPU $r6, $r5
+---
+name:            neg_redef_ry
+tracksRegLiveness: true
+noVRegs:         true
+liveins:
+  - { reg: '$r5' }
+  - { reg: '$r7' }
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r5, $r7
+    $r3 = ADDIK $r0, 0
+
+  bb.1:
+    successors: %bb.1(0x7c000000), %bb.2(0x04000000)
+    liveins: $r3, $r5, $r7
+    $r6 = ADDK $r7, $r0
+    $r7 = ADDIK $r7, 1
+    $r4 = CMPU $r6, $r5
+    BGTID killed $r4, %bb.1
+
+  bb.2:
+    RTSD $r15, 8, implicit $r15
+...
+
+# ── Negative: the branch target is a forward block ────────────────────────────
+# bgtid targets bb.2 (a higher-numbered block), so it is not a backward branch
+# and hoistCopyToDelaySlot declines.  No substitution: the cmpu must still read
+# r6.
+#
+# CHECK-LABEL: name: neg_forward
+# CHECK:      $r6 = ADDK $r7, $r0
+# CHECK-NEXT: $r4 = CMPU $r6, $r5
+---
+name:            neg_forward
+tracksRegLiveness: true
+noVRegs:         true
+liveins:
+  - { reg: '$r5' }
+  - { reg: '$r7' }
+body:             |
+  bb.0:
+    successors: %bb.2(0x40000000), %bb.1(0x40000000)
+    liveins: $r5, $r7
+    $r6 = ADDK $r7, $r0
+    $r4 = CMPU $r6, $r5
+    BGTID killed $r4, %bb.2
+
+  bb.1:
+    successors: %bb.2
+    liveins: $r6
+    $r3 = ADDIK $r6, 7
+
+  bb.2:
+    RTSD $r15, 8, implicit $r15
+...
+
+# ── Negative: a call separates the copy from the branch ───────────────────────
+# The forward scan hits the call (BRLID) and aborts before reaching the bgtid.
+# r22/r23/r24 are callee-saved so they survive the call.  No substitution: the
+# cmpu must still read r23.
+#
+# CHECK-LABEL: name: neg_call
+# CHECK:      $r4 = CMPU $r23, $r24
+# CHECK-NEXT: BGTID killed $r4, %bb.1 {
+# CHECK-NEXT:   NOP
+# CHECK-NEXT: }
+---
+name:            neg_call
+tracksRegLiveness: true
+noVRegs:         true
+liveins:
+  - { reg: '$r22' }
+  - { reg: '$r24' }
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r22, $r24
+    $r3 = ADDIK $r0, 0
+
+  bb.1:
+    successors: %bb.1(0x7c000000), %bb.2(0x04000000)
+    liveins: $r3, $r22, $r24
+    $r23 = ADDK $r22, $r0
+    BRLID $r15, @ext, csr, implicit-def $r15, implicit-def $r1
+    $r4 = CMPU $r23, $r24
+    BGTID killed $r4, %bb.1
+
+  bb.2:
+    RTSD $r15, 8, implicit $r15
+...
