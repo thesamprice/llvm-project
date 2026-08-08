@@ -1446,6 +1446,32 @@ void LinkerScript::adjustOutputSections() {
   // We instead remove trivially empty sections. The bfd linker seems even
   // more aggressive at removing them.
   llvm::erase_if(sectionCommands, [&](SectionCommand *cmd) { return !cmd; });
+
+  // A TLS variable's alignment is relative to the start of the TLS block, not
+  // to its own output section, so the first TLS output section must be aligned
+  // to the maximum alignment of every TLS output section. Otherwise a variable
+  // in a later, more strictly aligned TLS section (typically .tbss) lands at a
+  // block-relative offset that does not satisfy its alignment. GNU ld does this
+  // in _bfd_elf_tls_setup(); without a SECTIONS command we get the same effect
+  // by aligning the PT_LOAD that starts PT_TLS (see Writer::assignAddresses),
+  // so this is only needed, and only applied, for the linker script case.
+  if (!hasSectionsCommand)
+    return;
+  OutputSection *firstTls = nullptr;
+  uint32_t maxTlsAlign = 1;
+  for (SectionCommand *cmd : sectionCommands) {
+    auto *osd = dyn_cast<OutputDesc>(cmd);
+    if (!osd)
+      continue;
+    OutputSection *sec = &osd->osec;
+    if (!sec->isLive() || !(sec->flags & SHF_TLS) || !(sec->flags & SHF_ALLOC))
+      continue;
+    if (!firstTls)
+      firstTls = sec;
+    maxTlsAlign = std::max(maxTlsAlign, sec->addralign);
+  }
+  if (firstTls)
+    firstTls->addralign = maxTlsAlign;
 }
 
 void LinkerScript::adjustSectionsAfterSorting() {
