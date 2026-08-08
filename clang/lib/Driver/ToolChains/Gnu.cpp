@@ -1772,7 +1772,11 @@ static void findRISCVBareMetalMultilibs(const Driver &D,
 static void findRISCVMultilibs(const Driver &D,
                                const llvm::Triple &TargetTriple, StringRef Path,
                                const ArgList &Args, DetectedMultilibs &Result) {
-  if (TargetTriple.getOS() == llvm::Triple::UnknownOS)
+  // RTEMS ships a GCC built with the bare metal multilib layout, <march>/<mabi>
+  // rather than the lib32/lib64 arrangement the OS variants below describe, so
+  // it has to be probed the same way an unknown OS is.
+  if (TargetTriple.getOS() == llvm::Triple::UnknownOS ||
+      TargetTriple.getOS() == llvm::Triple::RTEMS)
     return findRISCVBareMetalMultilibs(D, TargetTriple, Path, Args, Result);
 
   FilterNonExistent NonExistent(Path, "/crtbegin.o", D.getVFS());

@@ -27,6 +27,7 @@
 #include "ToolChains/HIPSPV.h"
 #include "ToolChains/HLSL.h"
 #include "ToolChains/Haiku.h"
+#include "ToolChains/RTEMS.h"
 #include "ToolChains/Hexagon.h"
 #include "ToolChains/Hurd.h"
 #include "ToolChains/LFILinux.h"
@@ -7030,6 +7031,9 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
       break;
     case llvm::Triple::Haiku:
       TC = std::make_unique<toolchains::Haiku>(*this, Target, Args);
+      break;
+    case llvm::Triple::RTEMS:
+      TC = std::make_unique<toolchains::RTEMS>(*this, Target, Args);
       break;
     case llvm::Triple::Darwin:
     case llvm::Triple::MacOSX:

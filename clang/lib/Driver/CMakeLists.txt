@@ -70,6 +70,7 @@ add_clang_library(clangDriver
   ToolChains/Fuchsia.cpp
   ToolChains/Gnu.cpp
   ToolChains/Haiku.cpp
+  ToolChains/RTEMS.cpp
   ToolChains/HIPUtility.cpp
   ToolChains/HIPAMD.cpp
   ToolChains/HIPSPV.cpp
