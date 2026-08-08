@@ -766,6 +766,13 @@ bool llvm::inferNonMandatoryLibFuncAttrs(Function &F,
     Changed |= setOnlyReadsMemory(F, 0);
     break;
   case LibFunc_ctermid:
+    // POSIX: when the argument is non-null, ctermid() writes the pathname into
+    // the caller's buffer and *returns that same pointer*. The argument
+    // therefore escapes through the return value and must not be marked
+    // captures(none).
+    Changed |= setRetAndArgsNoUndef(F);
+    Changed |= setDoesNotThrow(F);
+    break;
   case LibFunc_clearerr:
   case LibFunc_closedir:
     Changed |= setRetAndArgsNoUndef(F);
