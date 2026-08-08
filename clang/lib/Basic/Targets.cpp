@@ -449,6 +449,8 @@ std::unique_ptr<TargetInfo> AllocateTarget(const llvm::Triple &Triple,
                                                                    Opts);
     case llvm::Triple::Linux:
       return std::make_unique<LinuxTargetInfo<RISCV32TargetInfo>>(Triple, Opts);
+    case llvm::Triple::RTEMS:
+      return std::make_unique<RTEMSTargetInfo<RISCV32TargetInfo>>(Triple, Opts);
     default:
       return std::make_unique<RISCV32TargetInfo>(Triple, Opts);
     }
@@ -495,6 +497,8 @@ std::unique_ptr<TargetInfo> AllocateTarget(const llvm::Triple &Triple,
     case llvm::Triple::Serenity:
       return std::make_unique<SerenityTargetInfo<RISCV64TargetInfo>>(Triple,
                                                                      Opts);
+    case llvm::Triple::RTEMS:
+      return std::make_unique<RTEMSTargetInfo<RISCV64TargetInfo>>(Triple, Opts);
     default:
       return std::make_unique<RISCV64TargetInfo>(Triple, Opts);
     }
