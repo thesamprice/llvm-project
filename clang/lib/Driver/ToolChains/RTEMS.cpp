@@ -141,7 +141,25 @@ void rtems::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-lrtemscpu");
     CmdArgs.push_back("-latomic");
     CmdArgs.push_back("-lc");
-    CmdArgs.push_back("-lgcc");
+    // GCC's spec ends the group with -lgcc because GCC always uses libgcc.
+    // Honour -rtlib instead: libgcc declares its soft float helpers hidden, and
+    // a linker which demotes hidden to local drops them from .symtab, so a
+    // runtime loader can no longer resolve them for a module it loads.  Adding
+    // libgcc unconditionally therefore breaks libdl on a compiler-rt build.
+    AddRunTimeLibs(TC, D, CmdArgs, Args);
+    // The unwinder still comes from libgcc: compiler-rt does not ship one and
+    // this toolchain installs no separate libgcc_eh.  It must come *after* the
+    // runtime library, because libgcc also defines the soft float helpers and
+    // declares them hidden.  A linker which demotes hidden to local would then
+    // put them in .symtab as local symbols, where a runtime loader can no
+    // longer see them -- so compiler-rt has to be scanned first and win.
+    // Only for a compiler-rt build: AddRunTimeLibs() already adds libgcc for
+    // an -rtlib=libgcc one.  This is not driven by GetUnwindLibType(), which
+    // returns UNW_None for compiler-rt on every target which is not Android,
+    // AIX or Serenity and never consults GetDefaultUnwindLibType().  GCC's
+    // -qrtems spec ends its group with -lgcc for the same reason.
+    if (TC.GetRuntimeLibType(Args) == ToolChain::RLT_CompilerRT)
+      CmdArgs.push_back("-lgcc");
     CmdArgs.push_back("--end-group");
   }
 

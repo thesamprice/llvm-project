@@ -6,7 +6,7 @@
 /// spec supplies -- the start files, the linker command file and the group
 /// around the mutually dependent RTEMS libraries -- had to be passed by hand.
 
-// RUN: %clang -### --target=riscv32-unknown-rtems7 -mabi=ilp32f \
+// RUN: %clang -### --target=riscv32-unknown-rtems7 -mabi=ilp32f -rtlib=compiler-rt \
 // RUN:   --sysroot=%S/Inputs/basic_rtems_tree/riscv-rtems7 \
 // RUN:   --gcc-install-dir=%S/Inputs/basic_rtems_tree/lib/gcc/riscv-rtems7/15.2.0 \
 // RUN:   %s 2>&1 | FileCheck %s
@@ -23,8 +23,12 @@
 // CHECK-SAME: "{{.*}}rv32imafc/ilp32f{{/|\\\\}}crtbegin.o"
 
 /// The RTEMS libraries are mutually dependent, so a linker which makes one
-/// pass over each archive cannot resolve them in any fixed order.
-// CHECK-SAME: "--start-group" "-lrtemsbsp" "-lrtemscpu" "-latomic" "-lc" "-lgcc" "--end-group"
+/// pass over each archive cannot resolve them in any fixed order.  libgcc
+/// comes after the runtime library: it also defines the soft float helpers and
+/// declares them hidden, so compiler-rt has to be scanned first and win, or a
+/// linker which demotes hidden to local hides them from the runtime loader.
+// CHECK-SAME: "--start-group" "-lrtemsbsp" "-lrtemscpu" "-latomic" "-lc"
+// CHECK-SAME: libclang_rt.builtins.a" "-lgcc" "--end-group"
 
 // CHECK-SAME: "{{.*}}rv32imafc/ilp32f{{/|\\\\}}crtend.o"
 // CHECK-SAME: "{{.*}}rv32imafc/ilp32f{{/|\\\\}}crtn.o"

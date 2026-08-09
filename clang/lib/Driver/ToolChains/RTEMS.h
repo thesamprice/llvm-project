@@ -62,8 +62,9 @@ public:
   /// compiler-rt and the driver agree on where to look.
   StringRef getOSLibName() const override { return "rtems"; }
 
+  /// RTEMS unwinds with libgcc; compiler-rt ships no unwinder.
   UnwindLibType GetDefaultUnwindLibType() const override {
-    return ToolChain::UNW_None;
+    return ToolChain::UNW_Libgcc;
   }
 
   /// RTEMS links with GNU binutils; the cross ld is found via the program
